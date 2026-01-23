@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "push-cache-backend.fullname" . }}
+  labels:
+    {{- include "push-cache-backend.labels" . | nindent 4 }}
+data:
+  serviceconfig.yaml: |
+    {{- include "push-cache-backend.config" . | nindent 4 }}

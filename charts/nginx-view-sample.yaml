@@ -1,0 +1,5 @@
+imagePullSecrets:
+  - name: dockerconfigjson-ghcr-io
+image:
+  repository: ghcr.io/polecatworks/bucket-view
+# serve_root: /app0

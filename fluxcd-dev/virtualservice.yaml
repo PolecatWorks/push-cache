@@ -1,0 +1,26 @@
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: app-cap
+spec:
+  hosts:
+    - dev.k8s
+  gateways:
+    - istio-ingress/k8s-gateway
+    - mesh # applies to all the sidecars in the mesh
+  http:
+    - name: cap-api-backend
+      match:
+        - uri:
+            prefix: /capture
+      route:
+        - destination:
+            host: cap-api-push-cache-backend
+    - name: cap-api-frontend
+      match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: cap-ui-nginx-view

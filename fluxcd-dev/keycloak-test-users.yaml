@@ -1,0 +1,34 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-user-jon-snow
+type: Opaque
+data:
+  password: am9obnNub3dwdw== # base64-encoded value of "johnsnowpw"
+---
+apiVersion: v1.edp.epam.com/v1
+kind: KeycloakRealmUser
+metadata:
+  name: dev-user-john-snow
+spec:
+  realmRef:
+    name: dev
+    kind: KeycloakRealm
+  username: johnsnow
+  firstName: John
+  lastName: Snow
+  email: john.snow13@example.com
+  enabled: true
+  emailVerified: true
+  keepResource: true
+  roles:
+    - offline_access
+  groups:
+    - ServiceCaptureReaders
+  attributes:
+    foo: bar
+    baz: jazz
+  passwordSecret:
+    name: keycloak-user-jon-snow
+    key: password

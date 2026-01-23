@@ -1,0 +1,76 @@
+{{- $configsha := tpl (include "push-cache-backend.config" .) . | sha256sum }}
+{{- $configshamini := substr 0 8 $configsha }}
+{{- $volumesha := tpl (toYaml .Values.volumes) . | sha256sum }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "push-cache-backend.fullname" . }}
+  labels:
+    {{- include "push-cache-backend.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      component: service-pod
+      {{- include "push-cache-backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "push-cache-backend.shas" . | nindent 8 }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        component: service-pod
+        {{- include "push-cache-backend.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "push-cache-backend.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes: {{- include "push-cache-backend.volumes" . | nindent 8 }}
+      containers:
+        - name: push-cache-backend
+          env: {{- include "push-cache-backend.env" . | nindent 12 }}
+          {{- with .Values.command }}
+          command: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.args }}
+          args: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts: {{- include "push-cache-backend.volumeMounts" . | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default  .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http-health
+              containerPort: 8079
+              protocol: TCP
+            - name: http-web
+              containerPort: 8080
+              protocol: TCP
+          lifecycle: {{- toYaml .Values.lifecycle | nindent 12 }}
+
+          livenessProbe: {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe: {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,76 @@
+{{- $configsha := include "nginx-view.configs" . | sha256sum }}
+{{- $configshamini := substr 0 8 $configsha }}
+{{- $volumesha := tpl (toYaml .Values.volumes) . | sha256sum }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nginx-view.fullname" . }}
+  labels:
+    {{- include "nginx-view.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      component: service-pod
+      {{- include "nginx-view.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "nginx-view.shas" . | nindent 8 }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        component: service-pod
+        {{- include "nginx-view.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes: {{- include "nginx-view.volumes" . | nindent 8 }}
+      containers:
+        - name: nginx-view
+          env: {{- include "nginx-view.env" . | nindent 12 }}
+          {{- with .Values.command }}
+          command: {{- . | toYaml | nindent 12 }}
+          {{- end }}
+          {{- with .Values.args }}
+          args: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts: {{- include "nginx-view.volumeMounts" . | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default  .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http-web
+              containerPort: 8080
+              protocol: TCP
+          lifecycle:
+            {{- toYaml .Values.lifecycle | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end  }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

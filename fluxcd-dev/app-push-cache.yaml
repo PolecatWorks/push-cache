@@ -1,0 +1,51 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: push-cache-backend
+spec:
+  interval: 10m
+  url: oci://ghcr.io/polecatworks/push-cache/helm/push-cache-backend
+  ref:
+    semver: ">= 0.1.x-0"
+    semverFilter: .*-main
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cap-api
+spec:
+  releaseName: cap-api
+  chartRef:
+    kind: OCIRepository
+    name: push-cache-backend
+  interval: 50m
+  install:
+    remediation:
+      retries: 3
+  values:
+    image:
+      repository: ghcr.io/polecatworks/push-cache-backend
+      tag: main
+      pullPolicy: Always # Dev ONLY
+    configs: {}
+    devsecops:
+      RequestAuthentication:
+        jwtRules:
+          - issuer: http://keycloak.k8s/auth/realms/dev
+            jwksUri: http://keycloak-keycloakx-http.auth/auth/realms/dev/protocol/openid-connect/certs
+            forwardOriginalToken: true
+            audiences:
+              - push-cache
+      AuthorizationPolicy:
+        rules:
+          - to:
+              - operation:
+                  methods:
+                    - GET
+                  paths:
+                    - /cache/hello*
+            when:
+              - key: request.auth.claims[resource_access][push-cache][roles]
+                values:
+                  - service-read

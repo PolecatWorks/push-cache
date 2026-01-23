@@ -1,0 +1,10 @@
+PUT instructions for accessing your service here
+
+Looking at stuff:
+{{- range $path, $_ := $.Files.Glob (printf "configs/content/%s" "*") }}
+$path
+{{- end }}
+
+
+shas:
+{{- include "nginx-view.shas" .  | nindent 2 }}

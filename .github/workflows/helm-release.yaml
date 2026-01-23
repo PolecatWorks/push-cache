@@ -1,0 +1,50 @@
+name: Helm Release
+
+on:
+  push:
+    tags: ["*.*.*"]
+    paths:
+      - "charts/**"
+      - ".github/workflows/helm-release.yaml"
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  release:
+    name: Release Helm Charts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - id: lower-repo
+        name: Repository to lowercase
+        run: |
+          SHORTER_REPO=${GITHUB_REPOSITORY%:*}
+          echo "repository=${SHORTER_REPO@L}" >> $GITHUB_OUTPUT
+
+      - name: Push Helm chart to OCI for service-capture-backend
+        uses: bsord/helm-push@v4
+        with:
+          chart-folder: charts/service-capture-backend
+          useOCIRegistry: true
+          registry-url: oci://ghcr.io/${{ steps.lower-repo.outputs.repository }}/helm
+          username: ${{ github.actor }}
+          access-token: ${{ secrets.GITHUB_TOKEN }}
+          force: true
+
+      - name: Push Helm chart to OCI for nginx-view
+        uses: bsord/helm-push@v4
+        with:
+          chart-folder: charts/nginx-view
+          useOCIRegistry: true
+          registry-url: oci://ghcr.io/${{ steps.lower-repo.outputs.repository }}/helm
+          username: ${{ github.actor }}
+          access-token: ${{ secrets.GITHUB_TOKEN }}
+          force: true

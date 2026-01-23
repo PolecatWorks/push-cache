@@ -1,0 +1,46 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: nginx-view
+spec:
+  interval: 10m
+  url: oci://ghcr.io/polecatworks/push-cache/helm/nginx-view
+  ref:
+    semver: ">= 0.1.x-0"
+    semverFilter: .*-main
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cap-ui
+spec:
+  releaseName: cap-ui
+  chartRef:
+    kind: OCIRepository
+    name: nginx-view
+  interval: 50m
+  install:
+    remediation:
+      retries: 3
+  values:
+    image:
+      repository: ghcr.io/polecatworks/push-cache-frontend
+      tag: main
+      pullPolicy: Always # Dev ONLY
+    config:
+      contents:
+        auth-config.json: |
+          {
+            "issuer": "http://keycloak.k8s/auth/realms/dev",
+            "redirectUri": "/index.html",
+            "clientId": "app-ui",
+            "responseType": "code",
+            "scope": "openid profile email offline_access",
+            "useSilentRefresh": true,
+            "showDebugInformation": true,
+            "timeoutFactor": 0.01,
+            "requireHttps": false,
+            "skipIssuerCheck": true,
+            "strictDiscoveryDocumentValidation": false
+          }

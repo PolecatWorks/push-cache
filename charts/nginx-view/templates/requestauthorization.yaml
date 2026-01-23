@@ -1,0 +1,17 @@
+{{- if .Values.devsecops.RequestAuthentication.jwtRules -}}
+---
+apiVersion: "security.istio.io/v1beta1"
+kind: RequestAuthentication
+metadata:
+  name: {{ include "nginx-view.fullname" . }}
+  labels:
+    {{- include "nginx-view.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "nginx-view.selectorLabels" . | nindent 6 }}
+  #   peers:
+  #   - mtls: {}
+  jwtRules:
+  {{-  tpl (toYaml .Values.devsecops.RequestAuthentication.jwtRules) . | nindent 4 }}
+{{- end -}}

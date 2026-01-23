@@ -1,0 +1,58 @@
+{{- $top := . }}
+{{- if .Values.schema }}
+{{- $config := .Values.schema }}
+{{- with (dict "Values" $config "Release" $top.Release "Chart" $top.Chart "Files" $top.Files "Capabilities" $top.Capabilities "Template" $top.Template ) }}
+{{- $configsha := tpl (include "push-cache-backend.config" .) . | sha256sum }}
+{{- $configshamini := substr 0 8 $configsha }}
+{{- $volumesha := tpl (toYaml .Values.volumes) . | sha256sum }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ template "push-cache-backend.fullname" . }}-schema-{{ $configshamini }}"
+  labels:
+  {{- include "push-cache-backend.labels" . | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.backoffLimit }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ $configsha }}
+        checksum/volumes: {{ $volumesha }}
+      labels:
+        component: schema-job
+        {{- include "push-cache-backend.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes: {{- include "push-cache-backend.volumes" . | nindent 8 }}
+      containers:
+        - name: {{ template "push-cache-backend.fullname" . }}-schema
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default  .Chart.AppVersion }}"
+          env: {{- include "push-cache-backend.env" . | nindent 12 }}
+          command: {{- .Values.command | toYaml | nindent 10 }}
+          {{- with .Values.args }}
+          args: {{- toYaml . | nindent 10 }}
+          {{- end }}
+          {{ with .Values.resources }}
+          resources:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts: []
+{{- end }}{{/* with */}}
+{{- end  }}{{/* if .Values.schema */}}

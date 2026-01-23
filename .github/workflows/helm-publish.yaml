@@ -1,0 +1,130 @@
+name: Helm CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  REGISTRY: ghcr.io
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-paths:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      charts: ${{ steps.filter.outputs.charts }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            charts:
+              - 'charts/**'
+              - '.github/workflows/helm-publish.yaml'
+
+  lint:
+    needs: check-paths
+    if: needs.check-paths.outputs.charts == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4.2.0
+
+      - name: Lint service-capture-backend
+        run: helm lint charts/service-capture-backend
+
+      - name: Lint nginx-view
+        run: helm lint charts/nginx-view
+
+  publish:
+    needs: check-paths
+    if: needs.check-paths.outputs.charts == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - id: lower-repo
+        name: Repository to lowercase
+        run: |
+          SHORTER_REPO=${GITHUB_REPOSITORY%:*}
+          echo "repository=${SHORTER_REPO@L}" >> $GITHUB_OUTPUT
+
+      - name: Get Short SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Update Chart Versions
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            suffix="-main"
+          else
+            suffix="-dev-${{ steps.vars.outputs.sha_short }}"
+          fi
+
+          sed -i "s/^version: .*/&${suffix}/" charts/service-capture-backend/Chart.yaml
+          echo "Updated Service Capture Backend Version:"
+          grep "^version:" charts/service-capture-backend/Chart.yaml
+
+          sed -i "s/^version: .*/&${suffix}/" charts/nginx-view/Chart.yaml
+          echo "Updated Nginx View Version:"
+          grep "^version:" charts/nginx-view/Chart.yaml
+
+      - name: Push Helm chart to OCI for service-capture-backend
+        uses: bsord/helm-push@v4
+        with:
+          chart-folder: charts/service-capture-backend
+          useOCIRegistry: true
+          registry-url: oci://ghcr.io/${{ steps.lower-repo.outputs.repository }}/helm
+          username: ${{ github.actor }}
+          access-token: ${{ secrets.GITHUB_TOKEN }}
+          force: true
+
+      - name: Push Helm chart to OCI for nginx-view
+        uses: bsord/helm-push@v4
+        with:
+          chart-folder: charts/nginx-view
+          useOCIRegistry: true
+          registry-url: oci://ghcr.io/${{ steps.lower-repo.outputs.repository }}/helm
+          username: ${{ github.actor }}
+          access-token: ${{ secrets.GITHUB_TOKEN }}
+          force: true
+
+  ci-success:
+    name: Helm CI Success
+    needs: [check-paths, lint, publish]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check Status
+        run: |
+          # If charts changed, check if the relevant job succeeded
+          if [[ "${{ needs.check-paths.outputs.charts }}" == 'true' ]]; then
+            if [[ "${{ github.event_name }}" == 'pull_request' ]]; then
+               if [[ "${{ needs.lint.result }}" != 'success' ]]; then
+                 echo "Lint failed!"
+                 exit 1
+               fi
+            else
+               if [[ "${{ needs.publish.result }}" != 'success' ]]; then
+                 echo "Publish failed!"
+                 exit 1
+               fi
+            fi
+          fi
+          echo "Success!"

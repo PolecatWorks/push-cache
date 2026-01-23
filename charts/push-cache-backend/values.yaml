@@ -1,0 +1,148 @@
+env: []
+  # - name: CAPTURE_LOG
+  #   value: INFO
+
+replicaCount: 1
+
+lifecycle:
+  preStop:
+    httpGet:
+      port: http-health
+      path: /hams/stop
+
+livenessProbe:
+  httpGet:
+    port: http-health
+    path: /hams/alive
+  periodSeconds: 30
+  initialDelaySeconds: 30
+
+readinessProbe:
+  httpGet:
+    port: http-health
+    path: /hams/ready
+  periodSeconds: 5
+
+image: &image
+  repository: polecatworks/push-cache-backend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations:
+  prometheus.io/path: /hams/metrics
+  prometheus.io/port: "8079"
+  prometheus.io/scrape: "true"
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+configs: {} # Note: Defaults provided in helm configs dir
+
+args:
+  - start
+  - --config
+  - /opt/app/configs/serviceconfig.yaml
+  - --secrets
+  - /opt/app/secrets
+
+secretName: null
+
+volumes: &volumes
+  - name: configs
+    configMap:
+      name: '{{ template "push-cache-backend.fullname" . }}'
+  - name: secrets
+    projected:
+      sources: []
+      # sources:
+      #   - secret:
+      #       optional: true
+      #       name: '{{ .Values.secretName | default (include "push-cache-backend.fullname" .) }}'
+      #       items:
+      #         - key: username
+      #           path: db/username
+      #         - key: password
+      #           path: db/password
+
+volumeMounts: &volume-mount
+  - name: configs
+    mountPath: /opt/app/configs
+  - name: secrets
+    mountPath: /opt/app/secrets
+
+devsecops:
+  RequestAuthentication:
+    jwtRules: []
+  AuthorizationPolicy:
+    rules: []
+# schema:
+#   command:
+#   - /usr/local/bin/push-cache-backend
+#   - migrate
+#   - --config
+#   - /opt/app/configs/serviceconfig.yaml
+#   - --secrets
+#   - /opt/app/secrets
+#   env:
+#     APP__PERSISTENCE__DB__CONNECTION__PASSWORD:
+#       valueFrom:
+#         secretKeyRef:
+#           name: tooling-postgres
+#           key: admin
+#     #! APP__PERSISTENCE__DB__CONNECTION__PASSWORD_FILE: database_admin/password
+#     APP__PERSISTENCE__DB__CONNECTION__USERNAME: postgres
+#   image: *image
+#     # repository: polecatworks/push-cache-backend
+#     # pullPolicy: IfNotPresent
+#   volumeMounts: *volume-mount
+#   volumes: *volumes

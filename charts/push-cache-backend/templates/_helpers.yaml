@@ -1,0 +1,96 @@
+
+
+
+{{/*
+Expand the name of the chart.
+*/}}
+{{- define "push-cache-backend.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+
+
+{{/*
+Create a default fully qualified app name.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
+*/}}
+{{- define "push-cache-backend.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "push-cache-backend.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+
+{{/*
+Common labels
+*/}}
+{{- define "push-cache-backend.labels" -}}
+helm.sh/chart: {{ include "push-cache-backend.chart" . }}
+{{ include "push-cache-backend.selectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+Selector labels
+*/}}
+{{- define "push-cache-backend.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "push-cache-backend.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+
+{{- define "push-cache-backend.config" -}}
+{{- $baseconfig := fromYaml (.Files.Get "configs/config.yaml") }}
+{{- $newconfig := .Values.configs }}
+{{- $postmerge := mergeOverwrite $baseconfig $newconfig }}
+{{- toYaml $postmerge }}
+{{- end -}}
+
+
+{{- define "push-cache-backend.volumes" -}}
+{{- tpl (toYaml .Values.volumes) . }}
+{{- end -}}
+
+{{- define "push-cache-backend.volumeMounts" -}}
+{{- tpl (toYaml .Values.volumeMounts) . }}
+{{- end -}}
+
+{{- define "push-cache-backend.env" -}}
+{{- tpl (toYaml .Values.env) . }}
+{{- end -}}
+
+
+{{- define "push-cache-backend.shas" -}}
+checksum/config: {{ tpl (include "push-cache-backend.config" .) . | sha256sum }}
+checksum/volumes: {{ tpl (include "push-cache-backend.volumes" .) . | sha256sum }}
+{{- end -}}
+
+
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "push-cache-backend.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "push-cache-backend.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}

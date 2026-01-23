@@ -1,0 +1,43 @@
+[package]
+name = "push-cache"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+axum = { version ="^0.8", features = ["macros"] }
+url = { version = "^2.5", features = ["serde"] }
+log = "^0.4"
+clap = { version = "^4.5", features = ["derive", "string"] }
+dotenv = "^0.15"
+env_logger = "^0.11"
+figment = { version = "^0.10", features = ["yaml", "env"] }
+figment_file_provider_adapter = "~0.1"
+serde = { version = "^1.0.228", features = ["derive"] }
+serde_json = "^1.0"
+tokio = { version = "^1.49", features = ["full"] }
+
+opentelemetry = "^0.31"
+opentelemetry_sdk = { version = "^0.31", features = ["rt-tokio", "metrics"] }
+opentelemetry-prometheus-text-exporter = "^0.2"
+# Use the official prometheus crate for the registry
+prometheus = "^0.14"
+tracing = "^0.1"
+tracing-opentelemetry = "^0.32"
+tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
+axum-prometheus = "^0.9"
+
+
+thiserror = "^2.0"
+reqwest = { version = "0.13", features = ["json"] }
+tower-http = { version = "0.6", features = ["trace"] }
+tokio-util = "^0.7"
+serde_with = "^3.12"
+chrono = { version = "^0.4", features = ["serde"] }
+futures = "~0.3"
+kafka = "~0.10"
+rdkafka = "~0.38"
+
+
+hamsrs = { git = "https://github.com/PolecatWorks/hams.git" }
+ffi-log2 = { git = "https://github.com/PolecatWorks/hams.git" }

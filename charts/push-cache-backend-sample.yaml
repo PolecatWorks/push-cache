@@ -1,0 +1,15 @@
+---
+env:
+  - name: CAPTURE_LOG
+    value: INFO
+image:
+  repository: ghcr.io/polecatworks/push-cache-backend
+  tag: main
+secretName: db0-service-cap-user
+configs:
+  persistence:
+    db:
+      connection:
+        url: postgres://cnpg-db0-cluster-rw.dbs.svc.cluster.local:5432/service_cap
+        username_file: db/username
+        password_file: db/password

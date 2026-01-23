@@ -1,0 +1,141 @@
+
+
+
+{{/*
+Expand the name of the chart.
+*/}}
+{{- define "nginx-view.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+
+
+{{/*
+Create a default fully qualified app name.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
+*/}}
+{{- define "nginx-view.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- $name := default .Chart.Name .Values.nameOverride -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "nginx-view.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+
+{{/*
+Common labels
+*/}}
+{{- define "nginx-view.labels" -}}
+helm.sh/chart: {{ include "nginx-view.chart" . }}
+{{ include "nginx-view.selectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+Selector labels
+*/}}
+{{- define "nginx-view.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "nginx-view.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+
+{{- define "nginx-view.getContents" -}}
+{{- $root:= . -}}
+{{- $basefiles := dict -}}
+{{- range $path, $_ :=  .Files.Glob (printf "config/contents/%s" "*") -}}
+{{- $filename := base $path -}}
+{{- $basecontent := $.Files.Get $path -}}
+{{- $_ := set $basefiles $filename $basecontent -}}
+{{- end -}}
+{{- $files := mergeOverwrite $basefiles .Values.config.contents -}}
+{{- tpl (toYaml $files) $root -}}
+{{- end -}}
+
+{{- define "nginx-view.getConfigs" -}}
+{{- $root:= . -}}
+{{- $basefiles := dict -}}
+{{- range $path, $_ :=  .Files.Glob (printf "config/configs/%s" "*") -}}
+{{- $filename := base $path -}}
+{{- $basecontent := $.Files.Get $path -}}
+{{- $_ := set $basefiles $filename $basecontent -}}
+{{- end -}}
+{{- $files := mergeOverwrite $basefiles .Values.config.configs -}}
+{{- tpl (toYaml $files) $root -}}
+{{- end -}}
+
+{{- define "nginx-view.getInits" -}}
+{{- $root:= . -}}
+{{- $basefiles := dict -}}
+{{- range $path, $_ :=  .Files.Glob (printf "config/inits/%s" "*") -}}
+{{- $filename := base $path -}}
+{{- $basecontent := $.Files.Get $path -}}
+{{- $_ := set $basefiles $filename $basecontent -}}
+{{- end -}}
+{{- $files := mergeOverwrite $basefiles .Values.config.inits -}}
+{{- tpl (toYaml $files) $root -}}
+{{- end -}}
+
+
+{{- define "nginx-view.configs" -}}
+{{- $baseconfig := fromYaml (.Files.Get "configs") }}
+{{- $newconfig := .Values.configs }}
+{{- $postmerge := mergeOverwrite $baseconfig $newconfig }}
+{{- toYaml $postmerge }}
+{{- end -}}
+
+
+
+{{- define "nginx-view.volumes" -}}
+{{- tpl (toYaml .Values.volumes) . }}
+{{- end -}}
+
+{{- define "nginx-view.volumeMounts" -}}
+{{- tpl (toYaml .Values.volumeMounts) . }}
+{{- end -}}
+
+{{- define "nginx-view.env" -}}
+{{- $myEnv := .Values.env -}}
+{{- $myEnv = append $myEnv (dict "name" "SERVE_ROOT" "value" .Values.serve_root) -}}
+{{- tpl (toYaml $myEnv) . }}
+{{- end -}}
+
+
+{{- define "nginx-view.shas" -}}
+checksum/config: {{ tpl (include "nginx-view.configs" .) . | sha256sum }}
+checksum/volumes: {{ tpl (include "nginx-view.volumes" .) . | sha256sum }}
+checksum/configs: {{ tpl (include "nginx-view.getConfigs" .) . | sha256sum }}
+checksum/inits: {{ tpl (include "nginx-view.getInits" .) . | sha256sum }}
+checksum/contents: {{ tpl (include "nginx-view.getContents" .) . | sha256sum }}
+{{- end -}}
+
+
+
+
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "nginx-view.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "nginx-view.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "push-cache-backend.fullname" . }}
+  labels:
+    {{- include "push-cache-backend.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.service.port | default 80 }}
+      targetPort: http-web
+      protocol: TCP
+      name: http-web
+    - name: http-envoy-prom
+      port: 15020
+      protocol: TCP
+      targetPort: 15020
+  selector:
+    component: service-pod
+    {{- include "push-cache-backend.selectorLabels" . | nindent 4 }}

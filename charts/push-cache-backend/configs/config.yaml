@@ -1,0 +1,19 @@
+---
+hams:
+  address: 0.0.0.0:8079
+  prefix: hams
+  logging: true
+  checks:
+    timeout: 5
+    fails: 2
+    preflights: []
+    # - http://localhost:4201
+    shutdowns: []
+runtime:
+  stack_size: 3145728
+  threads: 4
+  name: push-cache
+webservice:
+  prefix: /cache
+  address: 0.0.0.0:8080
+  forwarding_headers: []

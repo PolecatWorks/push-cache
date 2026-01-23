@@ -1,0 +1,49 @@
+name: Frontend Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-docker-publish.yml"
+      - ".github/workflows/frontend-release.yml"
+
+env:
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}-frontend
+
+jobs:
+  release:
+    name: Release Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: |
+          repo_name="${{ github.repository }}"
+          echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-frontend" >> $GITHUB_ENV
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add Release Tag
+        run: |
+          # Source image linked to the commit sha
+          SRC_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}:sha-${{ github.sha }}"
+          # Target image with the release tag
+          TARGET_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}:${{ github.ref_name }}"
+
+          echo "Retagging $SRC_IMAGE to $TARGET_IMAGE"
+          docker buildx imagetools create -t "$TARGET_IMAGE" "$SRC_IMAGE"

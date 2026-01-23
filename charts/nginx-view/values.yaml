@@ -1,0 +1,107 @@
+env: []
+serve_root: ""
+
+replicaCount: 1
+
+lifecycle: {}
+livenessProbe:
+  httpGet:
+    port: http-web
+    path: "/alive"
+  periodSeconds: 30
+  initialDelaySeconds: 30
+readinessProbe:
+  httpGet:
+    port: http-web
+    path: "/ready"
+  periodSeconds: 5
+
+image:
+  repository: polecatworks/nginx-view
+  tag: main
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+  # prometheus.io/path: /hams/metrics
+  # prometheus.io/port: "8079"
+  # prometheus.io/scrape: "true"
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+config:
+  configs: {} # Note: Defaults provided in config/configs directory
+  contents: {} # Note: Defaults provided in config/contents directory
+  inits: {} # Note: Defaults provided in config/inits directory
+
+nginxConfig:
+  rootPath: /
+
+command: []
+
+secretName: null
+
+volumes:
+  - name: configs
+    configMap:
+      name: '{{ template "nginx-view.fullname" . }}-configs'
+  - name: contents
+    configMap:
+      name: '{{ template "nginx-view.fullname" . }}-contents'
+  - name: init
+    configMap:
+      name: '{{ template "nginx-view.fullname" . }}-inits'
+
+volumeMounts:
+  - name: configs
+    # Targetting this dir allows the templates to be populated with envsubst
+    mountPath: /etc/nginx/templates
+  - name: contents
+    mountPath: /usr/share/nginx/html/assets/contents
+
+devsecops:
+  RequestAuthentication:
+    jwtRules: []
+  AuthorizationPolicy:
+    rules: []

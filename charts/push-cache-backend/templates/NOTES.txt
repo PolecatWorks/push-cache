@@ -3,4 +3,4 @@ You installed push-cache-backend
 check the values.yaml for configuration options
 
 shas:
-{{- include "push-cache.shas" .  | nindent 2 }}
+{{- include "push-cache-backend.shas" .  | nindent 2 }}

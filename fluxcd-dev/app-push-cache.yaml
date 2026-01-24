@@ -13,9 +13,9 @@ spec:
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: cap-api
+  name: push-cache-backend
 spec:
-  releaseName: cap-api
+  releaseName: push-cache-backend
   chartRef:
     kind: OCIRepository
     name: push-cache-backend

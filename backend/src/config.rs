@@ -56,6 +56,11 @@
 //!   prefix: "/cache"
 //!   address: "0.0.0.0:8080"
 //!   forwarding_headers: []
+//! kafka:
+//!   brokers: "localhost:9092"
+//!   group_id: "push-cache"
+//!   topic: "users"
+//!   schema_registry_url: "http://localhost:8081"
 //! "#;
 //!
 //! let secrets_path = "/path/to/secrets";

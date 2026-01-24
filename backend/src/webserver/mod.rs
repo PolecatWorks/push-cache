@@ -207,7 +207,7 @@ mod tests {
         http::{Request, StatusCode},
         routing::get,
     };
-    use std::sync::Arc;
+
     use tower::util::ServiceExt; // for oneshot
 
     async fn get_test_state() -> MyState {

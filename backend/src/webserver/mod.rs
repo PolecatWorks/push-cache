@@ -122,6 +122,9 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
     Ok(server.await?)
 }
 
+/// Handler for GET /users/{account_id}
+/// Retrieves a customer by their Account ID.
+/// Returns 200 OK with the customer data if found, or 404 Not Found.
 async fn get_user(
     State(state): State<MyState>,
     Path(account_id): Path<String>,
@@ -154,6 +157,9 @@ async fn get_user(
     Err(MyError::NotFound("User not found".into()))
 }
 
+/// Handler for POST /users
+/// Creates a new customer.
+/// Returns 201 Created on success, or 409 Conflict if the user already exists.
 async fn create_user(
     State(state): State<MyState>,
     Json(customer): Json<Customer>,
@@ -175,6 +181,9 @@ async fn create_user(
     }
 }
 
+/// Handler for DELETE /users/{account_id}
+/// Deletes a customer by their Account ID.
+/// Returns 200 OK with the deleted customer data, or 404 Not Found.
 async fn delete_user(
     State(state): State<MyState>,
     Path(account_id): Path<String>,
@@ -185,6 +194,9 @@ async fn delete_user(
     Err(MyError::NotFound("User not found".into()))
 }
 
+/// Handler for GET /users
+/// Lists customer keys with optional filtering and pagination.
+/// Returns 200 OK with a list of account IDs.
 async fn list_users(
     State(state): State<MyState>,
     Query(params): Query<ListUsersParams>,

@@ -20,7 +20,7 @@ spec:
     - name: cap-api-frontend
       match:
         - uri:
-            prefix: /
+            prefix: /cache/
       route:
         - destination:
-            host: cap-ui-nginx-view
+            host: cap-api-push-cache-backend

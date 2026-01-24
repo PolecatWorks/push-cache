@@ -4,21 +4,29 @@
 
 use axum::{
     Json, Router,
-    extract::{FromRequest, MatchedPath, Path, State},
+    extract::{FromRequest, MatchedPath, Path, Query, State},
     http::HeaderMap,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use axum_prometheus::PrometheusMetricLayer;
 use reqwest::StatusCode;
 use tower_http::trace::{DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer};
 use tracing::{Level, info};
 
+use crate::model::Customer;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tokio_util::sync::CancellationToken;
 
 use crate::{MyState, error::MyError};
+
+#[derive(Deserialize)]
+struct ListUsersParams {
+    limit: Option<usize>,
+    offset: Option<usize>,
+    filter: Option<String>,
+}
 
 /// Service Configuration
 #[derive(Deserialize, Debug, Clone)]
@@ -72,7 +80,8 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
         // .nest("/services", services::service_apis())
         // .nest("/dependencies", dependencies::dependency_apis())
         .route("/hello", get(|| async { "Hello, World!" }))
-        .route("/users/{account_id}", get(get_user))
+        .route("/users", post(create_user).get(list_users))
+        .route("/users/{account_id}", get(get_user).delete(delete_user))
         // .route("/metrics", get(|| async move { metric_handle.render() }))
         .layer(
             TraceLayer::new_for_http()
@@ -145,6 +154,68 @@ async fn get_user(
     Err(MyError::NotFound("User not found".into()))
 }
 
+async fn create_user(
+    State(state): State<MyState>,
+    Json(customer): Json<Customer>,
+) -> Result<impl IntoResponse, MyError> {
+    use dashmap::mapref::entry::Entry;
+
+    match state.cache.entry(customer.accountId.clone()) {
+        Entry::Occupied(_) => Ok((
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "message": "User already exists" })),
+        )),
+        Entry::Vacant(entry) => {
+            entry.insert(customer.clone());
+            Ok((
+                StatusCode::CREATED,
+                Json(serde_json::to_value(customer).unwrap()),
+            ))
+        }
+    }
+}
+
+async fn delete_user(
+    State(state): State<MyState>,
+    Path(account_id): Path<String>,
+) -> Result<impl IntoResponse, MyError> {
+    if let Some((_, customer)) = state.cache.remove(&account_id) {
+        return Ok((StatusCode::OK, Json(customer)));
+    }
+    Err(MyError::NotFound("User not found".into()))
+}
+
+async fn list_users(
+    State(state): State<MyState>,
+    Query(params): Query<ListUsersParams>,
+) -> Result<impl IntoResponse, MyError> {
+    let mut keys: Vec<String> = state
+        .cache
+        .iter()
+        .map(|entry| entry.key().clone())
+        .collect();
+
+    // Filter
+    if let Some(filter) = &params.filter {
+        keys.retain(|k| k.contains(filter));
+    }
+
+    // Sort for stability
+    keys.sort();
+
+    // Pagination
+    let offset = params.offset.unwrap_or(0);
+    let limit = params.limit.unwrap_or(usize::MAX);
+
+    let paged_keys: Vec<String> = keys
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect();
+
+    Ok(Json(paged_keys))
+}
+
 impl IntoResponse for MyError {
     fn into_response(self) -> Response {
         #[derive(Serialize)]
@@ -198,6 +269,7 @@ impl IntoResponse for MyError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::routing::delete;
     use crate::MyState;
     use crate::config::{MyConfig, MyKafkaConfig};
     use crate::model::Customer;
@@ -221,6 +293,249 @@ mod tests {
         };
 
         MyState::new(&config, false).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_create_user_success() {
+        let state = get_test_state().await;
+
+        let app = Router::new()
+            .route("/users", post(create_user))
+            .with_state(state.clone());
+
+        let customer = Customer {
+            accountId: "new_user".to_string(),
+            name: "New User".to_string(),
+            address: "New Address".to_string(),
+            phone: "000".to_string(),
+            createdAt: 100,
+            updatedAt: 200,
+        };
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/users")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&customer).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert!(state.cache.contains_key("new_user"));
+    }
+
+    #[tokio::test]
+    async fn test_create_user_conflict() {
+        let state = get_test_state().await;
+        // Pre-populate
+        let customer = Customer {
+            accountId: "existing".to_string(),
+            name: "Existing".to_string(),
+            address: "Address".to_string(),
+            phone: "123".to_string(),
+            createdAt: 100,
+            updatedAt: 200,
+        };
+        state
+            .cache
+            .insert(customer.accountId.clone(), customer.clone());
+
+        let app = Router::new()
+            .route("/users", post(create_user))
+            .with_state(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/users")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&customer).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_delete_user_success() {
+        let state = get_test_state().await;
+        let customer = Customer {
+            accountId: "to_delete".to_string(),
+            name: "Delete Me".to_string(),
+            address: "Address".to_string(),
+            phone: "123".to_string(),
+            createdAt: 100,
+            updatedAt: 200,
+        };
+        state.cache.insert("to_delete".to_string(), customer);
+
+        let app = Router::new()
+            .route("/users/{account_id}", delete(delete_user))
+            .with_state(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/users/to_delete")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(!state.cache.contains_key("to_delete"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_user_not_found() {
+        let state = get_test_state().await;
+        let app = Router::new()
+            .route("/users/{account_id}", delete(delete_user))
+            .with_state(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/users/nonexistent")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_list_users() {
+        let state = get_test_state().await;
+        state.cache.insert(
+            "user1".to_string(),
+            Customer {
+                accountId: "user1".to_string(),
+                name: "User 1".to_string(),
+                address: "A".to_string(),
+                phone: "1".to_string(),
+                createdAt: 0,
+                updatedAt: 0,
+            },
+        );
+        state.cache.insert(
+            "user2".to_string(),
+            Customer {
+                accountId: "user2".to_string(),
+                name: "User 2".to_string(),
+                address: "A".to_string(),
+                phone: "1".to_string(),
+                createdAt: 0,
+                updatedAt: 0,
+            },
+        );
+
+        let app = Router::new()
+            .route("/users", get(list_users))
+            .with_state(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/users")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let keys: Vec<String> = serde_json::from_slice(&body_bytes).unwrap();
+
+        // Sorting is guaranteed by implementation
+        assert_eq!(keys, vec!["user1", "user2"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_pagination() {
+        let state = get_test_state().await;
+        for i in 0..5 {
+            let id = format!("user{}", i);
+            state.cache.insert(
+                id.clone(),
+                Customer {
+                    accountId: id,
+                    name: "U".to_string(),
+                    address: "A".to_string(),
+                    phone: "1".to_string(),
+                    createdAt: 0,
+                    updatedAt: 0,
+                },
+            );
+        }
+
+        let app = Router::new()
+            .route("/users", get(list_users))
+            .with_state(state.clone());
+
+        // Limit 2, Offset 1 -> user1, user2 (user0, user1, user2, user3, user4 sorted)
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/users?limit=2&offset=1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let keys: Vec<String> = serde_json::from_slice(&body_bytes).unwrap();
+
+        assert_eq!(keys, vec!["user1", "user2"]);
+    }
+
+    #[tokio::test]
+    async fn test_list_users_filter() {
+        let state = get_test_state().await;
+        state.cache.insert("apple".to_string(), Customer{accountId: "apple".to_string(), name: "".to_string(), address: "".to_string(), phone: "".to_string(), createdAt: 0, updatedAt: 0});
+        state.cache.insert("banana".to_string(), Customer{accountId: "banana".to_string(), name: "".to_string(), address: "".to_string(), phone: "".to_string(), createdAt: 0, updatedAt: 0});
+        state.cache.insert("apricot".to_string(), Customer{accountId: "apricot".to_string(), name: "".to_string(), address: "".to_string(), phone: "".to_string(), createdAt: 0, updatedAt: 0});
+
+        let app = Router::new()
+            .route("/users", get(list_users))
+            .with_state(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/users?filter=ap")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let keys: Vec<String> = serde_json::from_slice(&body_bytes).unwrap();
+
+        assert_eq!(keys, vec!["apple", "apricot"]);
     }
 
     #[tokio::test]

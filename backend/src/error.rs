@@ -43,4 +43,10 @@ pub enum MyError {
 
     #[error("EnvFilter error `{0}`")]
     EnvFilterError(#[from] FromEnvError),
+
+    #[error("Not Found: `{0}`")]
+    NotFound(String),
+
+    #[error("Schema Mismatch: expected {expected}, actual {actual}")]
+    SchemaMismatch { expected: i32, actual: i32 },
 }

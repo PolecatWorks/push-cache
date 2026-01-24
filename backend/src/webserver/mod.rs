@@ -34,7 +34,7 @@ impl Default for WebServiceConfig {
     fn default() -> Self {
         Self {
             prefix: "/api".to_string(),
-            address: "127.0.0.1:8080".parse().unwrap(),
+            address: "0.0.0.0:8080".parse().unwrap(),
             forwarding_headers: vec![],
         }
     }
@@ -117,7 +117,7 @@ async fn get_user(
     State(state): State<MyState>,
     Path(account_id): Path<String>,
 ) -> Result<impl IntoResponse, MyError> {
-    state.requests_total.inc();
+    // state.requests_total.inc();
 
     if let Some(customer) = state.cache.get(&account_id) {
         // DashMap's get returns a Ref helper, verify we can serialize it or clone it.
@@ -142,7 +142,7 @@ async fn get_user(
     }
 
     state.requests_miss.inc();
-    Err(MyError::Message("User not found".into())) // Or specific 404 error if MyError supports it, otherwise generic fallback
+    Err(MyError::NotFound("User not found".into()))
 }
 
 impl IntoResponse for MyError {
@@ -153,13 +153,12 @@ impl IntoResponse for MyError {
         }
 
         let (status, message) = match self {
-            MyError::Message(msg) => {
-                if msg == "User not found" {
-                    (StatusCode::NOT_FOUND, msg.to_string())
-                } else {
-                    (StatusCode::INTERNAL_SERVER_ERROR, msg.to_string())
-                }
-            }
+            MyError::Message(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.to_string()),
+            MyError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.to_string()),
+            MyError::SchemaMismatch { .. } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Schema Mismatch".to_string(),
+            ),
             MyError::Cancelled => (StatusCode::INTERNAL_SERVER_ERROR, "Cancelled".to_string()),
             MyError::HamsError(_error) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Hams Error".to_string())
@@ -221,7 +220,7 @@ mod tests {
             cache_max_age_seconds: 60,
         };
 
-        MyState::new(&config).await.unwrap()
+        MyState::new(&config, false).await.unwrap()
     }
 
     #[tokio::test]

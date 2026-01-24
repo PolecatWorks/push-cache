@@ -36,5 +36,6 @@ mod tests {
         assert_eq!(result.accountId, "123");
         assert_eq!(result.name, "John Doe");
         assert_eq!(result.address, "123 Main St");
+        assert_eq!(result.createdAt, 1000);
     }
 }

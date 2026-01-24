@@ -1,4 +1,3 @@
-use apache_avro::types::Value;
 use apache_avro::{AvroSchema, from_avro_datum};
 use futures::TryStreamExt;
 use rdkafka::Message;
@@ -37,7 +36,16 @@ pub async fn start_consumer(state: MyState) {
                 Some(payload) => {
                     let bytes_result = get_bytes_result(Some(payload));
 
-                    if let Valid(_msg_id, payload) = bytes_result {
+                    if let Valid(msg_id, payload) = bytes_result {
+                        if msg_id != state.expected_schema_id {
+                            error!(
+                                "Schema mismatch! Expected: {}, Found: {}",
+                                state.expected_schema_id, msg_id
+                            );
+                            state.schema_mismatch_count.inc();
+                            return Ok(());
+                        }
+
                         // Use static schema for deserialization
                         // Note: from_avro_datum requires the Writer Schema (which we assume matches Customer::get_schema)
                         // If schema registry returns a different ID, technically we should fetch THAT schema to read.

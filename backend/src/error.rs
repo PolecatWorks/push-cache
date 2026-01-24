@@ -14,7 +14,7 @@ use tracing_subscriber::filter::FromEnvError;
 #[derive(Error, Debug)]
 pub enum MyError {
     #[error("General error `{0}`")]
-    Message(&'static str),
+    Message(String),
     #[error("Service Cancelled")]
     Cancelled,
 

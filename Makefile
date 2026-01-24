@@ -84,11 +84,13 @@ topics-create:
 	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --create --topic "test.topic" --partitions 1 --replication-factor 1
 	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --create --topic "input" --partitions 1 --replication-factor 1
 	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --create --topic "output" --partitions 1 --replication-factor 1
+	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --create --topic "push-cache-users" --partitions 1 --replication-factor 1
 
 topics-delete:
 	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --delete --topic "test.topic"
 	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --delete --topic "input"
 	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --delete --topic "output"
+	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --delete --topic "push-cache-users"
 
 topic-describe:
 	@if [ -z "$(TOPIC)" ]; then echo "Usage: make topic-describe TOPIC=<topic_name>"; exit 1; fi

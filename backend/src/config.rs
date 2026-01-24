@@ -105,6 +105,22 @@ pub struct MyConfig {
     pub hams: HamsConfig,
     pub runtime: ThreadRuntime,
     pub webservice: WebServiceConfig,
+    pub kafka: MyKafkaConfig,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct MyKafkaConfig {
+    pub brokers: String,
+    pub group_id: String,
+    pub topic: String,
+    pub schema_registry_url: String,
+    // Default to 300 seconds (5 minutes)
+    #[serde(default = "default_cache_max_age")]
+    pub cache_max_age_seconds: u64,
+}
+
+fn default_cache_max_age() -> u64 {
+    300
 }
 
 impl MyConfig {

@@ -39,5 +39,20 @@ kafka = "~0.10"
 rdkafka = "~0.38"
 
 
+
+dashmap = "^6.0"
+apache-avro = { version = "^0.16", features = ["derive"] }
 hamsrs = { git = "https://github.com/PolecatWorks/hams.git" }
 ffi-log2 = { git = "https://github.com/PolecatWorks/hams.git" }
+schema_registry_converter = { version = "4.0.0", features = ["avro", "json", "blocking"] }
+
+[dev-dependencies]
+criterion = "0.5"
+fake = { version = "2.9", features = ["derive", "chrono"] }
+rand = "0.8"
+uuid = { version = "1.0", features = ["v4"] }
+tower = { version = "0.5", features = ["util"] }
+
+[[bench]]
+name = "cache_benchmark"
+harness = false

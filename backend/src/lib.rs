@@ -1,21 +1,25 @@
 use std::{ffi::c_void, sync::Arc};
 
 use axum_prometheus::metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use dashmap::DashMap;
 use hamsrs::Hams;
-use prometheus::{IntGauge, Registry};
+use prometheus::{IntCounter, Registry};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    config::MyConfig, error::MyError, tokio_tools::run_in_tokio, webserver::start_app_api,
+    config::MyConfig, error::MyError, model::Customer, tokio_tools::run_in_tokio,
+    webserver::start_app_api,
 };
 
 use metrics::{prometheus_response_free, prometheus_response_mystate};
 
 pub mod config;
+pub mod consumer;
 pub mod error;
 pub mod hams;
 mod metrics;
+pub mod model;
 pub mod tokio_tools;
 pub mod webserver;
 
@@ -27,8 +31,13 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Debug, Clone)]
 pub struct MyState {
     config: MyConfig,
-    pub count_good: Arc<Mutex<usize>>,
-    pub count_fail: Arc<Mutex<usize>>,
+    pub cache: Arc<DashMap<String, Customer>>,
+    // Metrics
+    pub requests_total: Box<IntCounter>,
+    pub requests_miss: Box<IntCounter>,
+    pub updates_received: Box<IntCounter>,
+    pub tombstones_processed: Box<IntCounter>,
+
     registry: Registry,
     prometheus_handle: Arc<PrometheusHandle>,
 }
@@ -37,15 +46,29 @@ impl MyState {
     pub async fn new(config: &MyConfig) -> Result<MyState, MyError> {
         let registry = Registry::new();
 
-        let hello_counter = IntGauge::new("my_counter", "A counter for my application")?;
-        registry.register(Box::new(hello_counter.clone()))?;
+        let requests_total = IntCounter::new("requests_total", "Total user info requests")?;
+        let requests_miss =
+            IntCounter::new("requests_miss", "Total requests with no record found")?;
+        let updates_received =
+            IntCounter::new("updates_received", "Total updates received from Kafka")?;
+        let tombstones_processed =
+            IntCounter::new("tombstones_processed", "Total tombstone records processed")?;
+
+        registry.register(Box::new(requests_total.clone()))?;
+        registry.register(Box::new(requests_miss.clone()))?;
+        registry.register(Box::new(updates_received.clone()))?;
+        registry.register(Box::new(tombstones_processed.clone()))?;
 
         let metric_handle = PrometheusBuilder::new().install_recorder().unwrap();
 
         Ok(MyState {
             config: config.clone(),
-            count_good: Arc::new(Mutex::new(0)),
-            count_fail: Arc::new(Mutex::new(0)),
+            cache: Arc::new(DashMap::new()),
+            requests_total: Box::new(requests_total),
+            requests_miss: Box::new(requests_miss),
+            updates_received: Box::new(updates_received),
+            tombstones_processed: Box::new(tombstones_processed),
+
             registry,
             prometheus_handle: Arc::new(metric_handle),
         })
@@ -78,6 +101,12 @@ pub async fn service_cancellable(ct: CancellationToken, config: &MyConfig) -> Re
     )?;
 
     hams.start().unwrap();
+
+    // Start Kafka Consumer
+    let consumer_state = state.clone();
+    tokio::spawn(async move {
+        consumer::start_consumer(consumer_state).await;
+    });
 
     let server = start_app_api(state.clone(), ct.clone());
 

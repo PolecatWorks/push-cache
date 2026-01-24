@@ -3,8 +3,9 @@
 // pub mod users;
 
 use axum::{
-    Router,
-    extract::{FromRequest, MatchedPath},
+    Json, Router,
+    extract::{FromRequest, MatchedPath, Path, State},
+    http::HeaderMap,
     response::{IntoResponse, Response},
     routing::get,
 };
@@ -71,6 +72,7 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
         // .nest("/services", services::service_apis())
         // .nest("/dependencies", dependencies::dependency_apis())
         .route("/hello", get(|| async { "Hello, World!" }))
+        .route("/users/{account_id}", get(get_user))
         // .route("/metrics", get(|| async move { metric_handle.render() }))
         .layer(
             TraceLayer::new_for_http()
@@ -111,6 +113,38 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
     Ok(server.await?)
 }
 
+async fn get_user(
+    State(state): State<MyState>,
+    Path(account_id): Path<String>,
+) -> Result<impl IntoResponse, MyError> {
+    state.requests_total.inc();
+
+    if let Some(customer) = state.cache.get(&account_id) {
+        // DashMap's get returns a Ref helper, verify we can serialize it or clone it.
+        // Customer implements Clone.
+        let customer_data = customer.value().clone();
+
+        // Headers
+        let mut headers = HeaderMap::new();
+        // Standard caching headers
+        let max_age = state.config.kafka.cache_max_age_seconds;
+        headers.insert(
+            "Cache-Control",
+            format!("public, max-age={}", max_age).parse().unwrap(),
+        );
+        // ETag could be a hash of the content, or just updated_at timestamp
+        headers.insert(
+            "ETag",
+            format!("\"{}\"", customer_data.updatedAt).parse().unwrap(),
+        );
+
+        return Ok((headers, Json(customer_data)));
+    }
+
+    state.requests_miss.inc();
+    Err(MyError::Message("User not found".into())) // Or specific 404 error if MyError supports it, otherwise generic fallback
+}
+
 impl IntoResponse for MyError {
     fn into_response(self) -> Response {
         #[derive(Serialize)]
@@ -119,7 +153,13 @@ impl IntoResponse for MyError {
         }
 
         let (status, message) = match self {
-            MyError::Message(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.to_string()),
+            MyError::Message(msg) => {
+                if msg == "User not found" {
+                    (StatusCode::NOT_FOUND, msg.to_string())
+                } else {
+                    (StatusCode::INTERNAL_SERVER_ERROR, msg.to_string())
+                }
+            }
             MyError::Cancelled => (StatusCode::INTERNAL_SERVER_ERROR, "Cancelled".to_string()),
             MyError::HamsError(_error) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Hams Error".to_string())
@@ -156,3 +196,91 @@ impl IntoResponse for MyError {
 }
 
 // Tests removed as they rely on DB
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MyState;
+    use crate::config::{MyConfig, MyKafkaConfig};
+    use crate::model::Customer;
+    use axum::{
+        Router,
+        body::Body,
+        http::{Request, StatusCode},
+        routing::get,
+    };
+    use std::sync::Arc;
+    use tower::util::ServiceExt; // for oneshot
+
+    async fn get_test_state() -> MyState {
+        let mut config = MyConfig::default();
+        config.kafka = MyKafkaConfig {
+            brokers: "localhost:9092".to_string(),
+            group_id: "test".to_string(),
+            topic: "test-topic".to_string(),
+            schema_registry_url: "http://localhost:8081".to_string(),
+            cache_max_age_seconds: 60,
+        };
+
+        MyState::new(&config).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_get_user_found() {
+        let state = get_test_state().await;
+
+        // Populate cache
+        let customer = Customer {
+            accountId: "123".to_string(),
+            name: "Test User".to_string(),
+            address: "Address".to_string(),
+            phone: "123".to_string(),
+            createdAt: 100,
+            updatedAt: 200,
+        };
+        state.cache.insert("123".to_string(), customer);
+
+        let app = Router::new()
+            .route("/users/{account_id}", get(get_user))
+            .with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/users/123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Verify Headers
+        let headers = response.headers();
+        assert!(headers.contains_key("cache-control"));
+        assert!(headers.contains_key("etag"));
+        assert_eq!(headers["cache-control"], "public, max-age=60");
+        assert_eq!(headers["etag"], "\"200\"");
+    }
+
+    #[tokio::test]
+    async fn test_get_user_not_found() {
+        let state = get_test_state().await;
+
+        let app = Router::new()
+            .route("/users/{account_id}", get(get_user))
+            .with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/users/999")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+}

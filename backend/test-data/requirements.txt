@@ -1,0 +1,11 @@
+confluent-kafka
+faker
+click
+fastavro
+requests
+attrs
+pydantic
+certifi
+httpx
+authlib
+cachetools

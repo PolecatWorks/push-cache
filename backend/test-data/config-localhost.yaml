@@ -17,12 +17,9 @@ webservice:
   prefix: /cache
   address: 0.0.0.0:8080
   forwarding_headers: []
-persistence:
-  db:
-    pool_size: 20
-    automigrate: true
-    acquire_timeout: 3
-    connection:
-      url: postgres://localhost:5432/push-cache
-      username_file: db/username
-      password_file: db/password
+kafka:
+  brokers: "localhost:9092"
+  group_id: "push-cache-group"
+  topic: "push-cache-users"
+  schema_registry_url: "http://localhost:8081"
+  cache_max_age_seconds: 300

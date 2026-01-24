@@ -28,7 +28,12 @@ spec:
       repository: ghcr.io/polecatworks/push-cache-backend
       tag: main
       pullPolicy: Always # Dev ONLY
-    configs: {}
+    configs:
+      kafka:
+        brokers: kafka.confluent.svc:9092
+        group_id: push-cache
+        topic: users
+        schema_registry_url: http://schemaregistry.confluent.svc:8081
     devsecops:
       RequestAuthentication:
         jwtRules:

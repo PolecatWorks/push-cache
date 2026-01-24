@@ -40,11 +40,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4.2.0
 
-      - name: Lint service-capture-backend
-        run: helm lint charts/service-capture-backend
-
-      - name: Lint nginx-view
-        run: helm lint charts/nginx-view
+      - name: Lint push-cache-backend
+        run: helm lint charts/push-cache-backend
 
   publish:
     needs: check-paths
@@ -76,28 +73,14 @@ jobs:
             suffix="-dev-${{ steps.vars.outputs.sha_short }}"
           fi
 
-          sed -i "s/^version: .*/&${suffix}/" charts/service-capture-backend/Chart.yaml
-          echo "Updated Service Capture Backend Version:"
-          grep "^version:" charts/service-capture-backend/Chart.yaml
+          sed -i "s/^version: .*/&${suffix}/" charts/push-cache-backend/Chart.yaml
+          echo "Updated Push Cache Backend Version:"
+          grep "^version:" charts/push-cache-backend/Chart.yaml
 
-          sed -i "s/^version: .*/&${suffix}/" charts/nginx-view/Chart.yaml
-          echo "Updated Nginx View Version:"
-          grep "^version:" charts/nginx-view/Chart.yaml
-
-      - name: Push Helm chart to OCI for service-capture-backend
+      - name: Push Helm chart to OCI for push-cache-backend
         uses: bsord/helm-push@v4
         with:
-          chart-folder: charts/service-capture-backend
-          useOCIRegistry: true
-          registry-url: oci://ghcr.io/${{ steps.lower-repo.outputs.repository }}/helm
-          username: ${{ github.actor }}
-          access-token: ${{ secrets.GITHUB_TOKEN }}
-          force: true
-
-      - name: Push Helm chart to OCI for nginx-view
-        uses: bsord/helm-push@v4
-        with:
-          chart-folder: charts/nginx-view
+          chart-folder: charts/push-cache-backend
           useOCIRegistry: true
           registry-url: oci://ghcr.io/${{ steps.lower-repo.outputs.repository }}/helm
           username: ${{ github.actor }}

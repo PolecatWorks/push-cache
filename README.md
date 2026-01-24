@@ -1,85 +1,121 @@
 # Push Cache
 
-* [![backend Docker](https://github.com/PolecatWorks/push-cache/actions/workflows/backend-docker-publish.yml/badge.svg)](https://github.com/PolecatWorks/push-cache/actions/workflows/backend-docker-publish.yml)
-* [![frontend Docker](https://github.com/PolecatWorks/push-cache/actions/workflows/frontend-docker-publish.yml/badge.svg)](https://github.com/PolecatWorks/push-cache/actions/workflows/frontend-docker-publish.yml)
-* [![Helm](https://github.com/PolecatWorks/push-cache/actions/workflows/helm-publish.yaml/badge.svg)](https://github.com/PolecatWorks/push-cache/actions/workflows/helm-publish.yaml)
+[![Backend Build](https://github.com/PolecatWorks/push-cache/actions/workflows/backend-docker-publish.yml/badge.svg)](https://github.com/PolecatWorks/push-cache/actions/workflows/backend-docker-publish.yml)
 
+**Push Cache** is a high-performance, in-memory caching service written in Rust. It consumes customer data from a Kafka topic (Avro formatted) and exposes it via a fast HTTP API. It is designed to be a sidecar or microservice that provides low-latency access to eventually consistent data.
 
-This app provides a high-performance caching and message relay system using Kafka.
+## Architecture
 
+The service consists of two main components running concurrently:
+1.  **Kafka Consumer**: Ingests `Customer` updates from a Kafka topic, deserializes Avro messages, and updates the in-memory cache. It handles "tombstone" records (null payload) by removing entries.
+2.  **Web Service**: An Axum-based HTTP server that serves the cached data to clients.
 
-The backend will be written in Rust.
+```mermaid
+graph TD
+    K[Kafka Topic] -- Avro Messages --> C(Kafka Consumer)
+    SR[Schema Registry] -- Schema Validation --> C
+    C -- Insert/Update/Remove --> M[(In-Memory Cache)]
 
-The frontend will be written in Angular with Material Design.
+    Client[HTTP Client] -- GET /api/users/:id --> API(Web Service)
+    API -- Lookup --> M
+    M -- Customer Data --> API
+    API -- JSON Response --> Client
+```
 
-The app will be containerized and deployed to a Kubernetes cluster.
+## Data Structures
 
-The app will be deployed to a Kubernetes cluster.
+### Customer Model
+The core data entity is the `Customer`.
 
-## Tech Stack
+| Field       | Type   | Description |
+|-------------|--------|-------------|
+| `accountId` | String | Unique identifier (Key) |
+| `name`      | String | Customer Name |
+| `address`   | String | Customer Address |
+| `phone`     | String | Contact Phone |
+| `createdAt` | i64    | Creation timestamp |
+| `updatedAt` | i64    | Last update timestamp |
 
-### Backend
-- Rust
-- Axum
-- Kubernetes
+## API Reference
 
-### Frontend
-- Angular
-- Material Design
-- Kubernetes
+### Get Customer
+Retrieves a customer by their Account ID.
 
-# Getting Started
+- **URL**: `/api/users/{account_id}`
+- **Method**: `GET`
+- **Response**: `200 OK` (JSON) or `404 Not Found`
+- **Headers**:
+    - `Cache-Control`: public, max-age={config.seconds}
+    - `ETag`: "{updatedAt}"
 
-If you have Make installed, you can use the following commands to get started:
+## Configuration
 
-    make backend-dev
-    make frontend-dev
+Configuration is handled via `figment` and can be supplied via a YAML file or environment variables (`APP_`).
 
-Or with Docker:
-    make backend-docker-run
-    make frontend-docker-run
-### Authentication
+| Section | Key | Default | Description |
+|---------|-----|---------|-------------|
+| **webservice** | `address` | `0.0.0.0:8080` | Bind address for the API |
+| | `prefix` | `/api` | API path prefix |
+| **kafka** | `brokers` | *Required* | Kafka bootstrap servers |
+| | `group_id` | *Required* | Consumer group ID |
+| | `topic` | *Required* | Topic name to consume |
+| | `schema_registry_url` | *Required* | URL for Schema Registry |
+| | `cache_max_age_seconds` | `300` | HTTP Cache-Control max-age |
 
-Get the relevant APIs:
+Example `config.yaml`:
+```yaml
+webservice:
+  address: "0.0.0.0:8080"
+  prefix: "/api"
 
-    curl http://keycloak.k8s/auth/realms/dev/.well-known/openid-configuration
+kafka:
+  brokers: "localhost:9092"
+  group_id: "push-cache-group"
+  topic: "users"
+  schema_registry_url: "http://localhost:8081"
+  cache_max_age_seconds: 60
+```
 
-To obtain a JWT for user `jon snow` in the `dev` realm:
+## Development
 
-    curl -X POST http://keycloak.k8s/auth/realms/dev/protocol/openid-connect/token \
-    -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "grant_type=password" \
-    -d "username=johnsnow" \
-    -d "password=johnsnow" \
-    -d "client_id=app-ui"
+### Prerequisites
+- Rust (latest stable)
+- Kafka & Zookeeper (local or remote)
+- Schema Registry
+- `make`
 
-
-
-
-Using python
-
-    ```python
-    import aiohttp
-
-    async def get_jwt_token():
-        url = "http://keycloak.k8s/auth/realms/dev/protocol/openid-connect/token"
-        data = {
-            "grant_type": "password",
-            "username": "johnsnow",
-            "password": "johnsnow",
-            "client_id": "app-ui"
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, data=data) as response:
-                return await response.json()
+### Quick Start
+1. **Start dependencies** (in separate terminals or background):
+    ```bash
+    make start-zookeeper
+    make start-kafka
+    make start-schema
     ```
 
+2. **Run the backend**:
+    ```bash
+    make backend-dev
+    ```
 
-# Testing
+### Testing
+Run unit tests and doctests:
+```bash
+make backend-test
+# OR directly:
+cd backend && cargo test
+```
 
-install the test environment to run the tests
+### Docker Build
+The project uses `cargo-chef` for optimized Docker layer caching.
+```bash
+make backend-docker
+```
 
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install poetry
-    poetry install --with dev
+## Operations
+
+- **Metrics**: Prometheus metrics are processed via `axum-prometheus`.
+- **Health Checks**: Integrated via `libhams`.
+- **Logging**: Structured logging via `tracing` and `tracing-subscriber`. Log level controlled via `CAPTURE_LOG` (default: WARN).
+
+## External Libraries
+- `libhams`: Custom library for service health and management. (Linking handled automatically in `build.rs`).

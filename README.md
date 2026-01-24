@@ -50,6 +50,36 @@ Retrieves a customer by their Account ID.
     - `Cache-Control`: public, max-age={config.seconds}
     - `ETag`: "{updatedAt}"
 
+### Create Customer
+Manually adds a new customer to the cache.
+
+- **URL**: `/api/users`
+- **Method**: `POST`
+- **Body**: JSON object matching the `Customer` model.
+- **Response**:
+    - `201 Created`: Returns the created customer.
+    - `409 Conflict`: If the user already exists.
+
+### Delete Customer
+Manually removes a customer from the cache.
+
+- **URL**: `/api/users/{account_id}`
+- **Method**: `DELETE`
+- **Response**:
+    - `200 OK`: Returns the deleted customer.
+    - `404 Not Found`: If the user does not exist.
+
+### List Customers (Keys)
+Lists all customer keys (account IDs) in the cache. Supports pagination and filtering.
+
+- **URL**: `/api/users`
+- **Method**: `GET`
+- **Query Parameters**:
+    - `limit` (optional): Number of keys to return (default: all).
+    - `offset` (optional): Number of keys to skip (default: 0).
+    - `filter` (optional): Filter keys by substring.
+- **Response**: `200 OK` with a JSON array of strings (keys).
+
 ## Configuration
 
 Configuration is handled via `figment` and can be supplied via a YAML file or environment variables (`APP_`).

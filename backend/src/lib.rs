@@ -3,7 +3,7 @@ use std::{ffi::c_void, sync::Arc};
 use axum_prometheus::metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use dashmap::DashMap;
 use hamsrs::Hams;
-use prometheus::{IntCounter, Registry};
+use prometheus::{IntCounter, IntGauge, Registry};
 use rdkafka::consumer::Consumer;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
@@ -40,6 +40,8 @@ pub struct MyState {
     pub updates_received: Box<IntCounter>,
     pub tombstones_processed: Box<IntCounter>,
     pub schema_mismatch_count: Box<IntCounter>,
+    pub cache_size: Box<IntGauge>,
+    pub consumer_lag: Box<IntGauge>,
     pub expected_schema_id: u32,
 
     registry: Registry,
@@ -61,12 +63,17 @@ impl MyState {
             "schema_mismatch_count",
             "Total messages with schema mismatch",
         )?;
+        let cache_size = IntGauge::new("push_cache_records_total", "Total records in cache")?;
+        let consumer_lag =
+            IntGauge::new("push_cache_consumer_lag_total", "Total Kafka consumer lag")?;
 
         registry.register(Box::new(requests_total.clone()))?;
         registry.register(Box::new(requests_miss.clone()))?;
         registry.register(Box::new(updates_received.clone()))?;
         registry.register(Box::new(tombstones_processed.clone()))?;
         registry.register(Box::new(schema_mismatch_count.clone()))?;
+        registry.register(Box::new(cache_size.clone()))?;
+        registry.register(Box::new(consumer_lag.clone()))?;
 
         // In test mode, we don't want to fail if the recorder is already set,
         // and we don't need the global recorder interaction as much.
@@ -139,6 +146,8 @@ impl MyState {
             updates_received: Box::new(updates_received),
             tombstones_processed: Box::new(tombstones_processed),
             schema_mismatch_count: Box::new(schema_mismatch_count),
+            cache_size: Box::new(cache_size),
+            consumer_lag: Box::new(consumer_lag),
             expected_schema_id,
 
             registry,

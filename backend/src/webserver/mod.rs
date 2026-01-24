@@ -173,6 +173,7 @@ async fn create_user(
         )),
         Entry::Vacant(entry) => {
             entry.insert(customer.clone());
+            state.cache_size.inc();
             Ok((
                 StatusCode::CREATED,
                 Json(serde_json::to_value(customer).unwrap()),
@@ -189,6 +190,7 @@ async fn delete_user(
     Path(account_id): Path<String>,
 ) -> Result<impl IntoResponse, MyError> {
     if let Some((_, customer)) = state.cache.remove(&account_id) {
+        state.cache_size.dec();
         return Ok((StatusCode::OK, Json(customer)));
     }
     Err(MyError::NotFound("User not found".into()))
@@ -219,11 +221,7 @@ async fn list_users(
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(usize::MAX);
 
-    let paged_keys: Vec<String> = keys
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect();
+    let paged_keys: Vec<String> = keys.into_iter().skip(offset).take(limit).collect();
 
     Ok(Json(paged_keys))
 }
@@ -281,10 +279,10 @@ impl IntoResponse for MyError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::routing::delete;
     use crate::MyState;
     use crate::config::{MyConfig, MyKafkaConfig};
     use crate::model::Customer;
+    use axum::routing::delete;
     use axum::{
         Router,
         body::Body,
@@ -523,9 +521,39 @@ mod tests {
     #[tokio::test]
     async fn test_list_users_filter() {
         let state = get_test_state().await;
-        state.cache.insert("apple".to_string(), Customer{accountId: "apple".to_string(), name: "".to_string(), address: "".to_string(), phone: "".to_string(), createdAt: 0, updatedAt: 0});
-        state.cache.insert("banana".to_string(), Customer{accountId: "banana".to_string(), name: "".to_string(), address: "".to_string(), phone: "".to_string(), createdAt: 0, updatedAt: 0});
-        state.cache.insert("apricot".to_string(), Customer{accountId: "apricot".to_string(), name: "".to_string(), address: "".to_string(), phone: "".to_string(), createdAt: 0, updatedAt: 0});
+        state.cache.insert(
+            "apple".to_string(),
+            Customer {
+                accountId: "apple".to_string(),
+                name: "".to_string(),
+                address: "".to_string(),
+                phone: "".to_string(),
+                createdAt: 0,
+                updatedAt: 0,
+            },
+        );
+        state.cache.insert(
+            "banana".to_string(),
+            Customer {
+                accountId: "banana".to_string(),
+                name: "".to_string(),
+                address: "".to_string(),
+                phone: "".to_string(),
+                createdAt: 0,
+                updatedAt: 0,
+            },
+        );
+        state.cache.insert(
+            "apricot".to_string(),
+            Customer {
+                accountId: "apricot".to_string(),
+                name: "".to_string(),
+                address: "".to_string(),
+                phone: "".to_string(),
+                createdAt: 0,
+                updatedAt: 0,
+            },
+        );
 
         let app = Router::new()
             .route("/users", get(list_users))

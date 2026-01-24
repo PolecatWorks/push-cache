@@ -41,6 +41,12 @@ FROM debian:trixie-slim AS runtime
 # https://github.com/GoogleContainerTools/distroless
 # FROM gcr.io/distroless/cc-debian12 as runtime
 WORKDIR /app
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    # Clean up
+    && apt-get autoremove -y \
+    && apt-get clean -y \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=sofile /usr/local/lib/libhams.so /usr/local/lib/
 RUN ldconfig
 COPY --from=build /app/target/release/push-cache /usr/local/bin/

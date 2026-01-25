@@ -267,6 +267,9 @@ impl IntoResponse for MyError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "EnvFilter Error".to_string(),
             ),
+            MyError::KafkaError(_error) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Kafka Error".to_string())
+            }
         };
 
         // Use a public constructor or helper function for ErrorResponse.
@@ -293,13 +296,32 @@ mod tests {
     use tower::util::ServiceExt; // for oneshot
 
     async fn get_test_state() -> MyState {
-        let mut config = MyConfig::default();
-        config.kafka = MyKafkaConfig {
-            brokers: "localhost:9092".to_string(),
+        let kafka_config = MyKafkaConfig {
+            brokers: "tcp://localhost:9092".parse().unwrap(),
             group_id: "test".to_string(),
             topic: "test-topic".to_string(),
-            schema_registry_url: "http://localhost:8081".to_string(),
+            schema_registry_url: "http://localhost:8081".parse().unwrap(),
             cache_max_age_seconds: 60,
+            fetch_metadata_timeout: std::time::Duration::from_secs(5),
+        };
+
+        let config = MyConfig {
+            hams: hamsrs::hams::config::HamsConfig::default(),
+            runtime: crate::tokio_tools::ThreadRuntime {
+                threads: 1,
+                stack_size: 1024 * 1024,
+                name: "test".to_string(),
+            },
+            webservice: WebServiceConfig {
+                prefix: "/api".to_string(),
+                address: "0.0.0.0:8080".parse().unwrap(),
+                forwarding_headers: vec![],
+            },
+            kafka: kafka_config,
+            startup_checks: crate::config::StartupCheckConfig {
+                fails: 1,
+                timeout: std::time::Duration::from_millis(100),
+            },
         };
 
         MyState::new(&config, false).await.unwrap()

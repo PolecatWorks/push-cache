@@ -48,7 +48,6 @@ enum Commands {
 }
 
 fn main() -> Result<ExitCode, MyError> {
-    // let env = EnvFilter::from_env("CAPTURE_LOG");
     let env = EnvFilter::builder()
         .with_default_directive(LevelFilter::WARN.into())
         .with_env_var("CAPTURE_LOG")

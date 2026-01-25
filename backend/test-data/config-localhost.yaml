@@ -23,3 +23,6 @@ kafka:
   topic: "push-cache-users"
   schema_registry_url: "http://localhost:8081"
   cache_max_age_seconds: 300
+startup_checks:
+  fails: 2
+  timeout: 5s

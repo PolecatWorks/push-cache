@@ -43,7 +43,7 @@ async fn main() {
         .expect("Failed to load config");
 
     let producer: FutureProducer = ClientConfig::new()
-        .set("bootstrap.servers", &config.kafka.brokers)
+        .set("bootstrap.servers", config.kafka.brokers.as_str())
         .set("message.timeout.ms", "5000")
         .create()
         .expect("Producer creation error");

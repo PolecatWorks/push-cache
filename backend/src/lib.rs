@@ -75,20 +75,14 @@ async fn check_kafka_metadata(config: &MyKafkaConfig) -> Result<(), MyError> {
             "bootstrap.servers",
             format!(
                 "{}:{}",
-                config
-                    .brokers
-                    .host_str()
-                    .ok_or_else(|| MyError::Message(format!(
-                        "Failed to get Kafka broker host {}",
-                        config.brokers
-                    )))?,
-                config
-                    .brokers
-                    .port()
-                    .ok_or_else(|| MyError::Message(format!(
-                        "Failed to get Kafka broker port {}",
-                        config.brokers
-                    )))?,
+                config.brokers.host_str().ok_or_else(|| {
+                    warn!("Kafka broker host not defined {:?}", config.brokers.host());
+                    MyError::Message(format!("Kafka broker host not defined {}", config.brokers))
+                })?,
+                config.brokers.port().ok_or_else(|| {
+                    warn!("Kafka broker port not defined {:?}", config.brokers.port());
+                    MyError::Message(format!("Kafka broker port not defined {}", config.brokers))
+                })?,
             ),
         )
         .create()?;
@@ -103,6 +97,10 @@ async fn check_kafka_metadata(config: &MyKafkaConfig) -> Result<(), MyError> {
         .iter()
         .any(|t| t.name() == config.topic && t.error().is_none() && !t.partitions().is_empty())
     {
+        warn!(
+            "Kafka topic {} not found or has not partitions",
+            config.topic
+        );
         return Err(MyError::Message(format!(
             "Kafka topic {} not found or has not partitions",
             config.topic
@@ -136,14 +134,14 @@ where
     G: FnMut() -> F, // G is a generator that creates futures
     F: Future<Output = Result<T, MyError>>,
 {
-    info!("Running checks: {:?}", config);
+    info!("Running check: {name}");
 
     let mut attempts_remaining = config.fails;
 
     while attempts_remaining > 0 {
         // Call the closure to get a fresh future instance for this attempt
         if let Ok(reply) = make_future().await {
-            info!("Check passed");
+            info!("Check passed: {name}");
             return Ok(reply);
         }
 
@@ -185,11 +183,16 @@ async fn fetch_latest_schema_id(sr_url: &Url, topic: &str) -> Result<u32, MyErro
         })?
         .json::<Value>()
         .await
-        .map_err(|e| MyError::Message(format!("Failed to parse Schema Registry response: {e}")))?
+        .map_err(|e| {
+            warn!("Failed to parse Schema Registry response: {e}");
+            MyError::Message(format!("Failed to parse Schema Registry response: {e}"))
+        })?
         .get("id")
         .and_then(|id| id.as_u64())
-        .ok_or_else(|| MyError::Message("Schema ID not found in response".to_string()))?
-        as u32;
+        .ok_or_else(|| {
+            warn!("Schema ID not found in response");
+            MyError::Message("Schema ID not found in response".to_string())
+        })? as u32;
 
     Ok(id)
 }
@@ -301,7 +304,7 @@ impl MyState {
         // and we don't need the global recorder interaction as much.
         let metric_handle = if perform_checks {
             PrometheusBuilder::new().install_recorder().map_err(|e| {
-                MyError::Message(format!("Failed to install Prometheus recorder: {}", e))
+                MyError::Message(format!("Failed to install Prometheus recorder: {e}"))
             })?
         } else {
             let recorder = PrometheusBuilder::new().build_recorder();

@@ -49,4 +49,7 @@ pub enum MyError {
 
     #[error("Schema Mismatch: expected {expected}, actual {actual}")]
     SchemaMismatch { expected: i32, actual: i32 },
+
+    #[error("Kafka error `{0}`")]
+    KafkaError(#[from] rdkafka::error::KafkaError),
 }

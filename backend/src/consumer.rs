@@ -11,6 +11,7 @@ use std::io::Cursor;
 use tracing::{error, info, warn};
 
 use crate::MyState;
+use crate::error::MyError;
 use crate::model::Customer;
 
 // Context to handle statistics callbacks
@@ -35,12 +36,18 @@ impl ClientContext for ConsumerStatsContext {
 
 impl ConsumerContext for ConsumerStatsContext {}
 
-pub async fn start_consumer(state: MyState) {
+pub async fn start_consumer(state: MyState) -> Result<(), MyError> {
     let kafka_config = &state.config.kafka;
     info!("Starting Kafka Consumer for topic: {}", kafka_config.topic);
 
-    let group_id = std::env::var("HOSTNAME").unwrap_or_else(|_| kafka_config.group_id.clone());
-    info!("Using consumer group id: {}", group_id);
+    let group_id = std::env::var("HOSTNAME").unwrap_or_else(|_| {
+        warn!(
+            "Failed to get hostname, using default group id {}",
+            kafka_config.group_id
+        );
+        kafka_config.group_id.clone()
+    });
+    info!("Consumer group id: {group_id}");
 
     let context = ConsumerStatsContext {
         state: state.clone(),
@@ -48,17 +55,20 @@ pub async fn start_consumer(state: MyState) {
 
     let consumer: StreamConsumer<ConsumerStatsContext> = ClientConfig::new()
         .set("group.id", &group_id)
-        .set("bootstrap.servers", &kafka_config.brokers)
+        .set(
+            "bootstrap.servers",
+            kafka_config
+                .brokers
+                .host_str()
+                .ok_or_else(|| MyError::Message("Failed to get Kafka broker host".to_owned()))?,
+        )
         .set("enable.partition.eof", "false")
         .set("session.timeout.ms", "6000")
         .set("enable.auto.commit", "true")
         .set("statistics.interval.ms", "5000")
-        .create_with_context(context)
-        .expect("Consumer creation failed");
+        .create_with_context(context)?;
 
-    consumer
-        .subscribe(&[&kafka_config.topic])
-        .expect("Can't subscribe to specified topic");
+    consumer.subscribe(&[&kafka_config.topic])?;
 
     let stream_processor = consumer.stream().try_for_each(|borrowed_message| {
         let state = state.clone();
@@ -125,6 +135,12 @@ pub async fn start_consumer(state: MyState) {
                             }
                             info!("Removed record for key: {}", key_str);
                         }
+                    } else {
+                        warn!(
+                            "Received message with null key: partition: {}, offset: {}",
+                            borrowed_message.partition(),
+                            borrowed_message.offset()
+                        );
                     }
                 }
             }
@@ -132,9 +148,5 @@ pub async fn start_consumer(state: MyState) {
         }
     });
 
-    info!("Starting event loop");
-    match stream_processor.await {
-        Ok(_) => info!("Stream processing terminated"),
-        Err(e) => error!("Stream processing failed: {}", e),
-    }
+    Ok(stream_processor.await?)
 }

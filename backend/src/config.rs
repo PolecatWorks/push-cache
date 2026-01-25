@@ -57,10 +57,15 @@
 //!   address: "0.0.0.0:8080"
 //!   forwarding_headers: []
 //! kafka:
-//!   brokers: "localhost:9092"
+//!   brokers: "tcp://localhost:9092"
 //!   group_id: "push-cache"
 //!   topic: "users"
 //!   schema_registry_url: "http://localhost:8081"
+//!   cache_max_age_seconds: 60
+//!   fetch_metadata_timeout: 5s
+//! startup_checks:
+//!   fails: 2
+//!   timeout: 5s
 //! "#;
 //!
 //! let secrets_path = "/path/to/secrets";
@@ -70,7 +75,7 @@
 //!
 //! This example demonstrates how to load a YAML configuration string and merge it
 //! with secrets stored in a specified directory.
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use figment::{
     Figment,
@@ -82,6 +87,8 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::{tokio_tools::ThreadRuntime, webserver::WebServiceConfig};
+
+// NOTE: Configs should not use defaults to ensure the user is aware of all the options
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct UrlWithUsernamePassword {
@@ -104,28 +111,32 @@ impl From<UrlWithUsernamePassword> for Url {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, Default)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct MyConfig {
     /// Config of my web service
     pub hams: HamsConfig,
     pub runtime: ThreadRuntime,
     pub webservice: WebServiceConfig,
     pub kafka: MyKafkaConfig,
+    pub startup_checks: StartupCheckConfig,
 }
 
-#[derive(Deserialize, Debug, Clone, Default)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct MyKafkaConfig {
-    pub brokers: String,
+    pub brokers: Url,
     pub group_id: String,
     pub topic: String,
-    pub schema_registry_url: String,
-    // Default to 300 seconds (5 minutes)
-    #[serde(default = "default_cache_max_age")]
+    pub schema_registry_url: Url,
     pub cache_max_age_seconds: u64,
+    #[serde(with = "humantime_serde")]
+    pub fetch_metadata_timeout: Duration,
 }
 
-fn default_cache_max_age() -> u64 {
-    300
+#[derive(Deserialize, Debug, Clone)]
+pub struct StartupCheckConfig {
+    pub fails: u32,
+    #[serde(with = "humantime_serde")]
+    pub timeout: Duration,
 }
 
 impl MyConfig {

@@ -1,4 +1,5 @@
-use std::{ffi::c_void, sync::Arc};
+use apache_avro::AvroSchema;
+use std::{collections::HashSet, ffi::c_void, sync::Arc};
 
 use axum_prometheus::metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use dashmap::DashMap;
@@ -158,18 +159,6 @@ where
     )))
 }
 
-/// Fetches the latest schema ID for the given topic from the Schema Registry.
-///
-/// # Arguments
-///
-/// * `sr_url` - The base URL of the Schema Registry.
-/// * `topic` - The name of the Kafka topic.
-///
-/// # Errors
-///
-/// Returns `MyError` if:
-/// * The connection to the Schema Registry fails.
-/// * The response cannot be parsed or lacks the "id" field.
 async fn fetch_latest_schema_id(sr_url: &Url, topic: &str) -> Result<u32, MyError> {
     let subject = format!("{topic}-value");
     let url = format!("{sr_url}/subjects/{subject}/versions/latest");
@@ -181,6 +170,56 @@ async fn fetch_latest_schema_id(sr_url: &Url, topic: &str) -> Result<u32, MyErro
                 "Failed to connect to Schema Registry at {url}: {e}"
             ))
         })?
+        .json::<Value>()
+        .await
+        .map_err(|e| {
+            warn!("Failed to parse Schema Registry response: {e}");
+            MyError::Message(format!("Failed to parse Schema Registry response: {e}"))
+        })?
+        .get("id")
+        .and_then(|id| id.as_u64())
+        .ok_or_else(|| {
+            warn!("Schema ID not found in response");
+            MyError::Message("Schema ID not found in response".to_string())
+        })? as u32;
+
+    Ok(id)
+}
+
+async fn fetch_schema_id(
+    sr_url: &Url,
+    topic: &str,
+    schema: &apache_avro::Schema,
+) -> Result<u32, MyError> {
+    let subject = format!("{topic}-value");
+    let url = format!("{sr_url}/subjects/{subject}/versions");
+
+    let schema_str = schema.canonical_form();
+    let body = serde_json::json!({
+        "schema": schema_str
+    });
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post(url.clone())
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            MyError::Message(format!(
+                "Failed to connect to Schema Registry at {url}: {e}"
+            ))
+        })?;
+
+    if res.status() == reqwest::StatusCode::NOT_FOUND {
+        // Warning: Schema not found
+        info!("Schema for struct not found in registry.");
+        return Err(MyError::Message(
+            "Schema for struct not found in registry".to_string(),
+        ));
+    }
+
+    let id = res
         .json::<Value>()
         .await
         .map_err(|e| {
@@ -259,7 +298,7 @@ pub struct MyState {
     pub schema_mismatch_count: Box<IntCounter>,
     pub cache_size: Box<IntGauge>,
     pub consumer_lag: Box<IntGauge>,
-    pub expected_schema_id: u32,
+    pub valid_schema_ids: Vec<u32>,
 
     registry: Registry,
     prometheus_handle: Arc<PrometheusHandle>,
@@ -305,8 +344,39 @@ impl MyState {
 
         run_startup_checks(config).await?;
 
-        let expected_schema_id =
-            fetch_latest_schema_id(&config.kafka.schema_registry_url, &config.kafka.topic).await?;
+        let mut valid_schema_ids = HashSet::new();
+
+        // 1. Fetch schema ID for our struct
+        match fetch_schema_id(
+            &config.kafka.schema_registry_url,
+            &config.kafka.topic,
+            &Customer::get_schema(),
+        )
+        .await
+        {
+            Ok(id) => {
+                info!("Found schema ID for struct: {}", id);
+                valid_schema_ids.insert(id);
+            }
+            Err(e) => warn!("Could not fetch schema ID for struct: {}", e),
+        }
+
+        // 2. Fetch latest schema ID (in case it's different and compatible - loose heuristic)
+        match fetch_latest_schema_id(&config.kafka.schema_registry_url, &config.kafka.topic).await {
+            Ok(id) => {
+                info!("Found latest schema ID: {}", id);
+                valid_schema_ids.insert(id);
+            }
+            Err(e) => warn!("Could not fetch latest schema ID: {}", e),
+        }
+
+        let valid_schema_ids_vec: Vec<u32> = valid_schema_ids.into_iter().collect();
+
+        if valid_schema_ids_vec.is_empty() {
+            return Err(MyError::Message(
+                "No valid schema IDs found. Cannot start consumer.".to_string(),
+            ));
+        }
 
         Ok(MyState {
             config: config.clone(),
@@ -318,7 +388,7 @@ impl MyState {
             schema_mismatch_count: Box::new(schema_mismatch_count),
             cache_size: Box::new(cache_size),
             consumer_lag: Box::new(consumer_lag),
-            expected_schema_id,
+            valid_schema_ids: valid_schema_ids_vec,
 
             registry,
             prometheus_handle: Arc::new(metric_handle),

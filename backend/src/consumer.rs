@@ -79,10 +79,10 @@ pub async fn start_consumer(state: MyState) -> Result<(), MyError> {
                     let bytes_result = get_bytes_result(Some(payload));
 
                     if let Valid(msg_id, payload) = bytes_result {
-                        if msg_id != state.expected_schema_id {
+                        if !state.valid_schema_ids.contains(&msg_id) {
                             error!(
-                                "Schema mismatch! Expected: {}, Found: {}",
-                                state.expected_schema_id, msg_id
+                                "Schema mismatch! Expected one of: {:?}, Found: {}",
+                                state.valid_schema_ids, msg_id
                             );
                             state.schema_mismatch_count.inc();
                             return Ok(());

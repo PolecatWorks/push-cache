@@ -19,8 +19,8 @@ webservice:
   forwarding_headers: []
 kafka:
   brokers: kafka://localhost:9092
-  group_id: "push-cache-group"
-  topic: "push-cache-users"
+  group_id: pushcgroup
+  topic: pcache-users
   schema_registry_url: "http://localhost:8081"
   cache_max_age_seconds: 300
   fetch_metadata_timeout: 5s

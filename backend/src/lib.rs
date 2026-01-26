@@ -1,4 +1,3 @@
-use apache_avro::AvroSchema;
 use std::{collections::HashSet, ffi::c_void, sync::Arc};
 
 use axum_prometheus::metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
@@ -6,278 +5,26 @@ use dashmap::DashMap;
 
 use hamsrs::Hams;
 use prometheus::{IntCounter, IntGauge, Registry};
-use rdkafka::{
-    ClientConfig,
-    consumer::{BaseConsumer, Consumer},
-};
-use serde_json::Value;
-
-/// Checks if the Schema Registry is reachable and supports the specified schema type.
-///
-/// # Arguments
-///
-/// * `config` - The application configuration containing the Schema Registry URL.
-/// * `schema_type` - The schema type to check for (e.g., "AVRO", "JSON", "PROTOBUF").
-///
-/// # Errors
-///
-/// Returns `MyError` if:
-/// * The connection to the Schema Registry fails.
-/// * The Schema Registry returns a non-success status code.
-/// * The response from the Schema Registry cannot be parsed.
-/// * The specified `schema_type` is not supported by the Schema Registry.
-async fn check_schema_registry(url: &Url, schema_type: &str) -> Result<(), MyError> {
-    let mut sr_url = url.clone();
-
-    sr_url.set_path("/schemas/types");
-
-    let res = reqwest::get(sr_url.clone()).await.map_err(|e| {
-        MyError::Message(format!(
-            "Failed to connect to Schema Registry at {sr_url}: {e}"
-        ))
-    })?;
-
-    if !res.status().is_success() {
-        return Err(MyError::Message(format!(
-            "Schema Registry check failed with status: {}",
-            res.status()
-        )));
-    }
-    let schema_types = res
-        .json::<Vec<String>>()
-        .await
-        .map_err(|e| MyError::Message(format!("Failed to parse Schema Registry response: {e}")))?;
-
-    if !schema_types.contains(&schema_type.to_uppercase()) {
-        return Err(MyError::Message(format!(
-            "Schema type {schema_type} is not supported by the Schema Registry. Supported types: {schema_types:?}"
-        )));
-    }
-
-    Ok(())
-}
-
-/// Checks if the Kafka broker is reachable and the specified topic exists.
-///
-/// # Arguments
-///
-/// * `url` - The URL of the Kafka broker.
-/// * `config` - The Kafka configuration containing broker and topic details.
-///
-/// # Errors
-///
-/// Returns `MyError` if:
-/// * The connection to the Kafka broker fails.
-/// * The metadata for the specified topic cannot be fetched.
-/// * The specified topic does not exist or has no partitions.
-async fn check_kafka_metadata(config: &MyKafkaConfig) -> Result<(), MyError> {
-    let consumer: BaseConsumer = ClientConfig::new()
-        .set(
-            "bootstrap.servers",
-            format!(
-                "{}:{}",
-                config.brokers.host_str().ok_or_else(|| {
-                    warn!("Kafka broker host not defined {:?}", config.brokers.host());
-                    MyError::Message(format!("Kafka broker host not defined {}", config.brokers))
-                })?,
-                config.brokers.port().ok_or_else(|| {
-                    warn!("Kafka broker port not defined {:?}", config.brokers.port());
-                    MyError::Message(format!("Kafka broker port not defined {}", config.brokers))
-                })?,
-            ),
-        )
-        .create()?;
-
-    // Fetch metadata for the specific topic
-    // Passing Some(topic_name) limits the request to just that topic
-
-    let metadata = consumer.fetch_metadata(Some(&config.topic), config.fetch_metadata_timeout)?;
-
-    let topics = metadata.topics();
-    if !topics
-        .iter()
-        .any(|t| t.name() == config.topic && t.error().is_none() && !t.partitions().is_empty())
-    {
-        warn!(
-            "Kafka topic {} not found or has not partitions",
-            config.topic
-        );
-        return Err(MyError::Message(format!(
-            "Kafka topic {} not found or has not partitions",
-            config.topic
-        )));
-    }
-
-    Ok(())
-}
-
-/// Executes an asynchronous check with a retry mechanism.
-///
-/// This function repeatedly calls the `make_future` closure to generate and await a future
-/// until it succeeds or the maximum number of attempts specified in `config` is reached.
-/// It waits for the duration specified in `config.timeout` between failed attempts.
-///
-/// # Arguments
-///
-/// * `name` - A descriptive name for the check, used in logging and error messages.
-/// * `config` - Configuration defining the number of retries and the timeout between them.
-/// * `make_future` - A closure that produces the future to be executed for each attempt.
-///
-/// # Errors
-///
-/// Returns `MyError` if the check fails after all configured attempts.
-async fn run_check<G, F, T>(
-    name: &str,
-    config: &StartupCheckConfig,
-    mut make_future: G,
-) -> Result<T, MyError>
-where
-    G: FnMut() -> F, // G is a generator that creates futures
-    F: Future<Output = Result<T, MyError>>,
-{
-    info!("Running check: {name}");
-
-    let mut attempts_remaining = config.fails;
-
-    while attempts_remaining > 0 {
-        // Call the closure to get a fresh future instance for this attempt
-        if let Ok(reply) = make_future().await {
-            info!("Check passed: {name}");
-            return Ok(reply);
-        }
-
-        attempts_remaining -= 1;
-        if attempts_remaining > 0 {
-            warn!("Check failed: {name}, rerunning in {:?}", config.timeout);
-            tokio::time::sleep(config.timeout).await;
-        }
-    }
-
-    Err(MyError::Message(format!(
-        "Check {} failed after {} attempts",
-        name, config.fails
-    )))
-}
-
-async fn fetch_latest_schema_id(sr_url: &Url, topic: &str) -> Result<u32, MyError> {
-    let subject = format!("{topic}-value");
-    let url = format!("{sr_url}/subjects/{subject}/versions/latest");
-
-    let id = reqwest::get(&url)
-        .await
-        .map_err(|e| {
-            MyError::Message(format!(
-                "Failed to connect to Schema Registry at {url}: {e}"
-            ))
-        })?
-        .json::<Value>()
-        .await
-        .map_err(|e| {
-            warn!("Failed to parse Schema Registry response: {e}");
-            MyError::Message(format!("Failed to parse Schema Registry response: {e}"))
-        })?
-        .get("id")
-        .and_then(|id| id.as_u64())
-        .ok_or_else(|| {
-            warn!("Schema ID not found in response");
-            MyError::Message("Schema ID not found in response".to_string())
-        })? as u32;
-
-    Ok(id)
-}
-
-async fn fetch_schema_id(
-    sr_url: &Url,
-    topic: &str,
-    schema: &apache_avro::Schema,
-) -> Result<u32, MyError> {
-    let subject = format!("{topic}-value");
-    let url = format!("{sr_url}/subjects/{subject}/versions");
-
-    let schema_str = schema.canonical_form();
-    let body = serde_json::json!({
-        "schema": schema_str
-    });
-
-    let client = reqwest::Client::new();
-    let res = client
-        .post(url.clone())
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| {
-            MyError::Message(format!(
-                "Failed to connect to Schema Registry at {url}: {e}"
-            ))
-        })?;
-
-    if res.status() == reqwest::StatusCode::NOT_FOUND {
-        // Warning: Schema not found
-        info!("Schema for struct not found in registry.");
-        return Err(MyError::Message(
-            "Schema for struct not found in registry".to_string(),
-        ));
-    }
-
-    let id = res
-        .json::<Value>()
-        .await
-        .map_err(|e| {
-            warn!("Failed to parse Schema Registry response: {e}");
-            MyError::Message(format!("Failed to parse Schema Registry response: {e}"))
-        })?
-        .get("id")
-        .and_then(|id| id.as_u64())
-        .ok_or_else(|| {
-            warn!("Schema ID not found in response");
-            MyError::Message("Schema ID not found in response".to_string())
-        })? as u32;
-
-    Ok(id)
-}
-
-async fn run_startup_checks(config: &MyConfig) -> Result<(), MyError> {
-    let checks_config = &config.startup_checks;
-
-    // Run connectivity checks (Schema Registry & Kafka) in parallel
-    // These checks ensure the services are reachable and basic requirements are met.
-    // run_check handles retries internally.
-    tokio::try_join!(
-        run_check("Schema Registry Connectivity", checks_config, || {
-            check_schema_registry(&config.kafka.schema_registry_url, "AVRO")
-        }),
-        run_check("Kafka Metadata Connectivity", checks_config, || {
-            check_kafka_metadata(&config.kafka)
-        }),
-    )?;
-
-    info!("All startup checks passed.");
-
-    Ok(())
-}
 
 use tokio_util::sync::CancellationToken;
 
-// use tokio::time::Duration; // Note: std::time::Duration is already used in the code, so we can use that.
-use tracing::{info, warn};
-use url::Url;
-
 use crate::{
-    config::{MyConfig, MyKafkaConfig, StartupCheckConfig},
-    error::MyError,
-    model::Customer,
-    tokio_tools::run_in_tokio,
-    webserver::start_app_api,
+    config::MyConfig, error::MyError, kafka_utils::get_schema_id, model::Customer,
+    tokio_tools::run_in_tokio, webserver::start_app_api,
 };
 
 use metrics::{prometheus_response_free, prometheus_response_mystate};
+
+use crate::startup_tools::run_startup_checks;
 
 pub mod config;
 pub mod consumer;
 pub mod error;
 pub mod hams;
+mod kafka_utils;
 mod metrics;
 pub mod model;
+mod startup_tools;
 pub mod tokio_tools;
 pub mod webserver;
 
@@ -346,29 +93,17 @@ impl MyState {
 
         let mut valid_schema_ids = HashSet::new();
 
-        // 1. Fetch schema ID for our struct
-        match fetch_schema_id(
-            &config.kafka.schema_registry_url,
+        let schema_id = get_schema_id::<Customer>(
+            config
+                .kafka
+                .schema_registry_url
+                .as_str()
+                .trim_end_matches('/'), // trim trailing slash
             &config.kafka.topic,
-            &Customer::get_schema(),
         )
-        .await
-        {
-            Ok(id) => {
-                info!("Found schema ID for struct: {}", id);
-                valid_schema_ids.insert(id);
-            }
-            Err(e) => warn!("Could not fetch schema ID for struct: {}", e),
-        }
+        .await?;
 
-        // 2. Fetch latest schema ID (in case it's different and compatible - loose heuristic)
-        match fetch_latest_schema_id(&config.kafka.schema_registry_url, &config.kafka.topic).await {
-            Ok(id) => {
-                info!("Found latest schema ID: {}", id);
-                valid_schema_ids.insert(id);
-            }
-            Err(e) => warn!("Could not fetch latest schema ID: {}", e),
-        }
+        valid_schema_ids.insert(schema_id.0);
 
         let valid_schema_ids_vec: Vec<u32> = valid_schema_ids.into_iter().collect();
 

@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{"deployment.kubernetes.io/revision":"1","meta.helm.sh/release-name":"push-cache-backend","meta.helm.sh/release-namespace":"dev"},"creationTimestamp":"2026-01-24T22:40:43Z","generation":1,"labels":{"app.kubernetes.io/instance":"push-cache-backend","app.kubernetes.io/managed-by":"Helm","app.kubernetes.io/name":"push-cache-backend","app.kubernetes.io/version":"0.2.0","helm.sh/chart":"push-cache-backend-0.1.0-main_7b7e01af52f8","helm.toolkit.fluxcd.io/name":"push-cache-backend","helm.toolkit.fluxcd.io/namespace":"dev"},"name":"push-cache-backend","namespace":"dev","resourceVersion":"20084391","uid":"eb7aed6e-18af-487d-b41c-a34bb3eef5a2"},"spec":{"progressDeadlineSeconds":600,"replicas":1,"revisionHistoryLimit":10,"selector":{"matchLabels":{"app.kubernetes.io/instance":"push-cache-backend","app.kubernetes.io/name":"push-cache-backend","component":"service-pod"}},"strategy":{"rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"},"type":"RollingUpdate"},"template":{"metadata":{"annotations":{"checksum/config":"dc3db613e0d2a571c05922185d7d88f5a22290cc902fe7b5f5941362fd3e4aed","checksum/volumes":"d550cbcc6a570edef5251cfdfc844da257dec0b244dd052d138690b188f8e66e","prometheus.io/path":"/hams/metrics","prometheus.io/port":"8079","prometheus.io/scrape":"true"},"labels":{"app.kubernetes.io/instance":"push-cache-backend","app.kubernetes.io/name":"push-cache-backend","component":"service-pod"}},"spec":{"containers":[{"args":["start","--config","/opt/app/configs/serviceconfig.yaml","--secrets","/opt/app/secrets"],"env":[{"name":"CAPTURE_LOG","value":"true"}],"image":"ghcr.io/polecatworks/push-cache-backend:main","imagePullPolicy":"Always","lifecycle":{"preStop":{"httpGet":{"path":"/hams/stop","port":"http-health","scheme":"HTTP"}}},"livenessProbe":{"failureThreshold":3,"httpGet":{"path":"/hams/alive","port":"http-health","scheme":"HTTP"},"initialDelaySeconds":30,"periodSeconds":30,"successThreshold":1,"timeoutSeconds":1},"name":"push-cache-backend","ports":[{"containerPort":8079,"name":"http-health","protocol":"TCP"},{"containerPort":8080,"name":"http-web","protocol":"TCP"}],"readinessProbe":{"failureThreshold":3,"httpGet":{"path":"/hams/ready","port":"http-health","scheme":"HTTP"},"periodSeconds":5,"successThreshold":1,"timeoutSeconds":1},"resources":{},"securityContext":{},"terminationMessagePath":"/dev/termination-log","terminationMessagePolicy":"File","volumeMounts":[{"mountPath":"/opt/app/configs","name":"configs"},{"mountPath":"/opt/app/secrets","name":"secrets"}]}],"dnsPolicy":"ClusterFirst","restartPolicy":"Always","schedulerName":"default-scheduler","securityContext":{},"serviceAccount":"push-cache-backend","serviceAccountName":"push-cache-backend","terminationGracePeriodSeconds":30,"volumes":[{"configMap":{"defaultMode":420,"name":"push-cache-backend"},"name":"configs"},{"name":"secrets","projected":{"defaultMode":420,"sources":null}}]}}},"status":{"conditions":[{"lastTransitionTime":"2026-01-24T22:40:43Z","lastUpdateTime":"2026-01-24T22:40:43Z","message":"Deployment does not have minimum availability.","reason":"MinimumReplicasUnavailable","status":"False","type":"Available"},{"lastTransitionTime":"2026-01-25T05:19:00Z","lastUpdateTime":"2026-01-25T05:19:00Z","message":"ReplicaSet \"push-cache-backend-85947b5b67\" has timed out progressing.","reason":"ProgressDeadlineExceeded","status":"False","type":"Progressing"}],"observedGeneration":1,"replicas":1,"unavailableReplicas":1,"updatedReplicas":1}}
+    meta.helm.sh/release-name: push-cache-backend
+    meta.helm.sh/release-namespace: dev
+  creationTimestamp: "2026-01-24T22:40:43Z"
+  generation: 2
+  labels:
+    app.kubernetes.io/instance: push-cache-backend
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: push-cache-backend
+    app.kubernetes.io/version: 0.2.0
+    helm.sh/chart: push-cache-backend-0.1.0-main_7b7e01af52f8
+    helm.toolkit.fluxcd.io/name: push-cache-backend
+    helm.toolkit.fluxcd.io/namespace: dev
+  name: push-cache-backend
+  namespace: dev
+  resourceVersion: "20193223"
+  uid: eb7aed6e-18af-487d-b41c-a34bb3eef5a2
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: push-cache-backend
+      app.kubernetes.io/name: push-cache-backend
+      component: service-pod
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/config: dc3db613e0d2a571c05922185d7d88f5a22290cc902fe7b5f5941362fd3e4aed
+        checksum/volumes: d550cbcc6a570edef5251cfdfc844da257dec0b244dd052d138690b188f8e66e
+        prometheus.io/path: /hams/metrics
+        prometheus.io/port: "8079"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/instance: push-cache-backend
+        app.kubernetes.io/name: push-cache-backend
+        component: service-pod
+    spec:
+      containers:
+        - args:
+            - start
+            - --config
+            - /opt/app/configs/serviceconfig.yaml
+            - --secrets
+            - /opt/app/secrets
+          env:
+            - name: CAPTURE_LOG
+              value: INFO
+          image: ghcr.io/polecatworks/push-cache-backend:main
+          imagePullPolicy: Always
+          lifecycle:
+            preStop:
+              httpGet:
+                path: /hams/stop
+                port: http-health
+                scheme: HTTP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /hams/alive
+              port: http-health
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: push-cache-backend
+          ports:
+            - containerPort: 8079
+              name: http-health
+              protocol: TCP
+            - containerPort: 8080
+              name: http-web
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /hams/ready
+              port: http-health
+              scheme: HTTP
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /opt/app/configs
+              name: configs
+            - mountPath: /opt/app/secrets
+              name: secrets
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: push-cache-backend
+      serviceAccountName: push-cache-backend
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: push-cache-backend
+          name: configs
+        - name: secrets
+          projected:
+            defaultMode: 420
+            sources: null
+status:
+  conditions:
+    - lastTransitionTime: "2026-01-24T22:40:43Z"
+      lastUpdateTime: "2026-01-24T22:40:43Z"
+      message: Deployment does not have minimum availability.
+      reason: MinimumReplicasUnavailable
+      status: "False"
+      type: Available
+    - lastTransitionTime: "2026-01-25T10:06:53Z"
+      lastUpdateTime: "2026-01-25T10:06:55Z"
+      message: ReplicaSet "push-cache-backend-6645c6cc94" is progressing.
+      reason: ReplicaSetUpdated
+      status: "True"
+      type: Progressing
+  observedGeneration: 2
+  replicas: 2
+  unavailableReplicas: 2
+  updatedReplicas: 1

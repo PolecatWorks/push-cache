@@ -197,10 +197,10 @@ async fn fetch_latest_schema_id(sr_url: &Url, topic: &str) -> Result<u32, MyErro
     Ok(id)
 }
 
-async fn run_startup_checks(config: &MyConfig) -> Result<u32, MyError> {
+async fn run_startup_checks(config: &MyConfig) -> Result<(), MyError> {
     let checks_config = &config.startup_checks;
 
-    // 1. Run connectivity checks (Schema Registry & Kafka) in parallel
+    // Run connectivity checks (Schema Registry & Kafka) in parallel
     // These checks ensure the services are reachable and basic requirements are met.
     // run_check handles retries internally.
     tokio::try_join!(
@@ -212,17 +212,9 @@ async fn run_startup_checks(config: &MyConfig) -> Result<u32, MyError> {
         }),
     )?;
 
-    // 2. Fetch the latest Schema ID
-    // This is separated because it depends on the Schema Registry being reachable,
-    // and we want to return this value.
-    let schema_id = run_check("Schema Registry ID Fetch", checks_config, || {
-        fetch_latest_schema_id(&config.kafka.schema_registry_url, &config.kafka.topic)
-    })
-    .await?;
+    info!("All startup checks passed.");
 
-    info!("All startup checks passed. Schema ID: {}", schema_id);
-
-    Ok(schema_id)
+    Ok(())
 }
 
 use tokio_util::sync::CancellationToken;
@@ -311,11 +303,10 @@ impl MyState {
             recorder.handle()
         };
 
-        let expected_schema_id = if perform_checks {
-            run_startup_checks(config).await?
-        } else {
-            0
-        };
+        run_startup_checks(config).await?;
+
+        let expected_schema_id =
+            fetch_latest_schema_id(&config.kafka.schema_registry_url, &config.kafka.topic).await?;
 
         Ok(MyState {
             config: config.clone(),

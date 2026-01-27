@@ -17,10 +17,3 @@ spec:
       route:
         - destination:
             host: push-cache-backend
-    - name: push-cache-frontend
-      match:
-        - uri:
-            prefix: /cache/
-      route:
-        - destination:
-            host: push-cache-backend

@@ -36,14 +36,25 @@ where
 
     while attempts_remaining > 0 {
         // Call the closure to get a fresh future instance for this attempt
-        if let Ok(reply) = make_future().await {
-            info!("Check passed: {name}");
-            return Ok(reply);
+        match make_future().await {
+            Ok(reply) => {
+                info!("Check passed: {name}");
+                return Ok(reply);
+            }
+            Err(err) => {
+                warn!(
+                    "Check failed: {name}, error= {err} rerunning in {:?}",
+                    config.timeout
+                );
+            }
         }
 
         attempts_remaining -= 1;
         if attempts_remaining > 0 {
-            warn!("Check failed: {name}, rerunning in {:?}", config.timeout);
+            warn!(
+                "Check failed: {name}, {attempts_remaining} attempts remaining, rerunning in {:?}",
+                config.timeout
+            );
             tokio::time::sleep(config.timeout).await;
         }
     }

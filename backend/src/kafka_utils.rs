@@ -31,6 +31,7 @@ pub async fn check_schema_registry(url: &Url, schema_type: &str) -> Result<(), M
 
     sr_url.set_path("/schemas/types");
 
+    info!("Checking Schema Registry at {sr_url}");
     let res = reqwest::get(sr_url.clone()).await.map_err(|e| {
         MyError::Message(format!(
             "Failed to connect to Schema Registry at {sr_url}: {e}"

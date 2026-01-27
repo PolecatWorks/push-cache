@@ -7,6 +7,11 @@ image:
   tag: main
 secretName: db0-service-cap-user
 configs:
+  kafka:
+    group_id: pushcgroup
+    topic: pcache-users
+    brokers: kafka://kafka.confluent.svc:9092
+    schema_registry_url: http://schemaregistry.confluent.svc:8081
   persistence:
     db:
       connection:

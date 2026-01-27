@@ -139,10 +139,12 @@ async fn get_user(
         // Headers
         let mut headers = HeaderMap::new();
         // Standard caching headers
-        let max_age = state.config.kafka.cache_max_age_seconds;
+        let max_age = state.config.kafka.cache_max_age;
         headers.insert(
             "Cache-Control",
-            format!("public, max-age={}", max_age).parse().unwrap(),
+            format!("public, max-age={}", max_age.as_secs())
+                .parse()
+                .unwrap(),
         );
         // ETag could be a hash of the content, or just updated_at timestamp
         headers.insert(
@@ -301,7 +303,7 @@ mod tests {
             group_id: "test".to_string(),
             topic: "test-topic".to_string(),
             schema_registry_url: "http://localhost:8081".parse().unwrap(),
-            cache_max_age_seconds: 60,
+            cache_max_age: std::time::Duration::from_secs(60),
             fetch_metadata_timeout: std::time::Duration::from_secs(5),
         };
 

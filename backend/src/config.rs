@@ -127,7 +127,8 @@ pub struct MyKafkaConfig {
     pub group_id: String,
     pub topic: String,
     pub schema_registry_url: Url,
-    pub cache_max_age_seconds: u64,
+    #[serde(with = "humantime_serde")]
+    pub cache_max_age: Duration,
     #[serde(with = "humantime_serde")]
     pub fetch_metadata_timeout: Duration,
 }

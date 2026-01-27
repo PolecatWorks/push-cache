@@ -24,15 +24,18 @@ spec:
     remediation:
       retries: 3
   values:
+    env:
+      - name: CAPTURE_LOG
+        value: INFO
     image:
       repository: ghcr.io/polecatworks/push-cache-backend
       tag: main
       pullPolicy: Always # Dev ONLY
     configs:
       kafka:
-        brokers: kafka.confluent.svc:9092
-        group_id: push-cache
-        topic: users
+        group_id: pushcgroup
+        topic: pcache-users
+        brokers: kafka://kafka.confluent.svc:9092
         schema_registry_url: http://schemaregistry.confluent.svc:8081
     devsecops:
       RequestAuthentication:

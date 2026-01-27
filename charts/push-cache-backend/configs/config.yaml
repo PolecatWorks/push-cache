@@ -17,3 +17,9 @@ webservice:
   prefix: /cache
   address: 0.0.0.0:8080
   forwarding_headers: []
+kafka:
+  cache_max_age: 300s
+  fetch_metadata_timeout: 5s
+startup_checks:
+  fails: 2
+  timeout: 5s

@@ -22,7 +22,7 @@ kafka:
   group_id: pushcgroup
   topic: pcache-users
   schema_registry_url: "http://localhost:8081"
-  cache_max_age_seconds: 300
+  cache_max_age: 300s
   fetch_metadata_timeout: 5s
 startup_checks:
   fails: 2

@@ -86,7 +86,11 @@ tolerations: []
 
 affinity: {}
 
-configs: {} # Note: Defaults provided in helm configs dir
+configs:
+  serviceconfig.yaml:
+    startup_checks:
+      fails: 10
+      timeout: 10s
 
 args:
   - start

@@ -119,7 +119,7 @@ pub async fn get_schema_id<T: AvroSchema>(
     let testme_schema = T::get_schema();
     let canonical_form = testme_schema.canonical_form();
     info!("Schema is {}", canonical_form);
-    info!("Registery URL: {}", registry);
+    info!("Registry URL: {}", registry);
 
     if let Schema::Record(RecordSchema { name, .. }) = testme_schema {
         let my_schema = T::get_schema();
@@ -137,14 +137,53 @@ pub async fn get_schema_id<T: AvroSchema>(
         let subject = format!("{topic}-{name}");
         let sr_settings = SrSettings::new(registry.to_owned());
 
-        let result = post_schema(&sr_settings, subject.clone(), schema_query)
-            .await
-            .map_err(|e| {
-                error!("Failed to register schema for subject {subject}: {e:?}");
-                MyError::Message(format!(
-                    "Failed to register schema for subject {subject}: {e:?}"
-                ))
-            })?;
+        let result = post_schema(&sr_settings, subject.clone(), schema_query.clone()).await;
+
+        if let Err(e) = &result {
+            error!("Failed to register schema for subject {subject}: {e:?}");
+
+            // Debugging probe
+            let client = reqwest::Client::new();
+            match Url::parse(registry) {
+                Ok(mut url) => {
+                    if let Ok(mut segments) = url.path_segments_mut() {
+                        segments.push("subjects");
+                        segments.push(&subject);
+                        segments.push("versions");
+                    }
+
+                    info!("Probing URL: {}", url);
+                    match client
+                        .post(url)
+                        .header("Content-Type", "application/vnd.schemaregistry.v1+json")
+                        .json(&schema_query)
+                        .send()
+                        .await
+                    {
+                        Ok(resp) => {
+                            let status = resp.status();
+                            let body = resp
+                                .text()
+                                .await
+                                .unwrap_or_else(|_| "<no body>".to_string());
+                            error!("Manual probe returned status: {}, body: {}", status, body);
+                        }
+                        Err(probe_err) => {
+                            error!("Manual probe failed: {}", probe_err);
+                        }
+                    }
+                }
+                Err(url_err) => {
+                    error!("Failed to parse registry URL for probe: {}", url_err);
+                }
+            }
+
+            return Err(MyError::Message(format!(
+                "Failed to register schema for subject {subject}: {e:?}"
+            )));
+        }
+
+        let result = result.unwrap();
 
         info!("Registry replied: {result:?}");
         return Ok((result.id, my_schema));

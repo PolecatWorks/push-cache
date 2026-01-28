@@ -131,6 +131,23 @@ pub struct MyKafkaConfig {
     pub cache_max_age: Duration,
     #[serde(with = "humantime_serde")]
     pub fetch_metadata_timeout: Duration,
+    pub offset_reset: KafkaOffsetReset,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum KafkaOffsetReset {
+    Earliest,
+    Latest,
+}
+
+impl std::fmt::Display for KafkaOffsetReset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KafkaOffsetReset::Earliest => write!(f, "earliest"),
+            KafkaOffsetReset::Latest => write!(f, "latest"),
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]

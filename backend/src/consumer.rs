@@ -66,6 +66,7 @@ pub async fn start_consumer(state: MyState) -> Result<(), MyError> {
         .set("session.timeout.ms", "6000")
         .set("enable.auto.commit", "true")
         .set("statistics.interval.ms", "5000")
+        .set("auto.offset.reset", &kafka_config.offset_reset.to_string())
         .create_with_context(context)?;
 
     consumer.subscribe(&[&kafka_config.topic])?;

@@ -89,21 +89,28 @@ impl MyState {
             recorder.handle()
         };
 
-        run_startup_checks(config).await?;
+        if perform_checks {
+            run_startup_checks(config).await?;
+        }
 
         let mut valid_schema_ids = HashSet::new();
 
-        let schema_id = get_schema_id::<Customer>(
-            config
-                .kafka
-                .schema_registry_url
-                .as_str()
-                .trim_end_matches('/'), // trim trailing slash
-            &config.kafka.topic,
-        )
-        .await?;
+        if perform_checks {
+            let schema_id = get_schema_id::<Customer>(
+                config
+                    .kafka
+                    .schema_registry_url
+                    .as_str()
+                    .trim_end_matches('/'), // trim trailing slash
+                &config.kafka.topic,
+            )
+            .await?;
 
-        valid_schema_ids.insert(schema_id.0);
+            valid_schema_ids.insert(schema_id.0);
+        } else {
+            // In test/no-check mode, assume a dummy schema ID if needed, or bypass check
+            valid_schema_ids.insert(0);
+        }
 
         let valid_schema_ids_vec: Vec<u32> = valid_schema_ids.into_iter().collect();
 
@@ -177,6 +184,8 @@ pub async fn service_cancellable(ct: CancellationToken, config: &MyConfig) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::StartupCheckConfig;
+    use crate::startup_tools::run_check;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 

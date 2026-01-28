@@ -24,6 +24,8 @@ kafka:
   schema_registry_url: http://localhost:8081
   cache_max_age: 300s
   fetch_metadata_timeout: 5s
+  offset_reset: earliest
 startup_checks:
   fails: 2
   timeout: 5s
+  enabled: true

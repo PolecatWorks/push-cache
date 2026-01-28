@@ -93,6 +93,7 @@ configs:
     startup_checks:
       fails: 10
       timeout: 10s
+      enabled: true
 
 args:
   - start

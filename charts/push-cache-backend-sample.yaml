@@ -13,6 +13,10 @@ configs:
     brokers: kafka://kafka.confluent.svc:9092
     schema_registry_url: http://schemaregistry.confluent.svc:8081
     offset_reset: earliest
+  startup_checks:
+    fails: 10
+    timeout: 10s
+    enabled: true
   persistence:
     db:
       connection:

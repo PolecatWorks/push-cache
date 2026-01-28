@@ -155,6 +155,7 @@ pub struct StartupCheckConfig {
     pub fails: u32,
     #[serde(with = "humantime_serde")]
     pub timeout: Duration,
+    pub enabled: bool,
 }
 
 impl MyConfig {

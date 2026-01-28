@@ -324,10 +324,11 @@ mod tests {
             startup_checks: crate::config::StartupCheckConfig {
                 fails: 1,
                 timeout: std::time::Duration::from_millis(100),
+                enabled: false,
             },
         };
 
-        MyState::new(&config, false).await.unwrap()
+        MyState::new(&config).await.unwrap()
     }
 
     #[tokio::test]

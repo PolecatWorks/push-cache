@@ -79,7 +79,9 @@ fn benchmark_cache(c: &mut Criterion) {
 fn benchmark_growth(c: &mut Criterion) {
     let mut group = c.benchmark_group("cache_growth");
     // Define the sizes we want to test
-    let sizes = [100, 1_000, 10_000, 100_000, 1_000_000];
+    let sizes = [
+        100, 1_000, 10_000, 100_000, 1_000_000, 5_000_000, 10_000_000, 16_000_000,
+    ];
 
     for size in sizes.iter() {
         group.bench_with_input(

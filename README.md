@@ -170,3 +170,31 @@ To run benchmarks:
 ```bash
 cargo bench --bench cache_benchmark
 ```
+
+## Concurrent Benchmarks
+
+Throughput with 1,000,000 entries and varying concurrency (Tokio tasks).
+
+| Concurrency | Throughput (QPS) |
+| :--- | :--- |
+| 1 | ~52 K |
+| 10 | ~290 K |
+| 50 | ~450 K |
+| 100 | ~1.2 M |
+| 500 | ~1.5 M |
+| **1000** | **~1.9 M** |
+
+To run:
+```bash
+cargo bench --bench concurrent_benchmark
+```
+
+### Impact of State Size on Concurrency
+
+Throughput with 100 concurrent tasks and varying state sizes.
+
+| State Size | Throughput (QPS) |
+| :--- | :--- |
+| 100,000 | ~1.16 M |
+| 1,000,000 | ~1.55 M |
+| 5,000,000 | (Incomplete) |

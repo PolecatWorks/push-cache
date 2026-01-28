@@ -151,3 +151,22 @@ make backend-docker
 
 ## External Libraries
 - `libhams`: Custom library for service health and management. (Linking handled automatically in `build.rs`).
+
+## Benchmarks
+
+Single query performance of `DashState` (DashMap) with growing state sizes.
+
+| State Size | Time (ns) | Trend |
+| :--- | :--- | :--- |
+| 100 | ~40.5 | Baseline |
+| 1,000 | ~37.9 | Fast |
+| 10,000 | ~56.1 | +48% |
+| 100,000 | ~128.9 | +130% |
+| 1,000,000 | ~267.1 | +107% |
+| 5,000,000 | ~322.0 | +20% |
+| **16,000,000** | **~350-400** | **Projected** |
+
+To run benchmarks:
+```bash
+cargo bench --bench cache_benchmark
+```

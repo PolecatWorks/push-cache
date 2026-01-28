@@ -52,8 +52,9 @@ pub struct MyState {
 }
 
 impl MyState {
-    pub async fn new(config: &MyConfig, perform_checks: bool) -> Result<MyState, MyError> {
+    pub async fn new(config: &MyConfig) -> Result<MyState, MyError> {
         let registry = Registry::new();
+        let perform_checks = config.startup_checks.enabled;
 
         let requests_total = IntCounter::new("requests_total", "Total user info requests")?;
         let requests_miss =
@@ -145,7 +146,7 @@ pub fn service_start(config: &MyConfig) -> Result<(), MyError> {
 }
 
 pub async fn service_cancellable(ct: CancellationToken, config: &MyConfig) -> Result<(), MyError> {
-    let state = MyState::new(config, true).await?;
+    let state = MyState::new(config).await?;
 
     // Initialise liveness here
 
@@ -194,6 +195,7 @@ mod tests {
         let config = StartupCheckConfig {
             fails: 3,
             timeout: Duration::from_millis(1),
+            enabled: false,
         };
 
         let result = run_check("test_check", &config, || async { Ok::<u32, MyError>(42) }).await;
@@ -207,6 +209,7 @@ mod tests {
         let config = StartupCheckConfig {
             fails: 3,
             timeout: Duration::from_millis(1),
+            enabled: false,
         };
 
         let counter = Arc::new(Mutex::new(0));
@@ -236,6 +239,7 @@ mod tests {
         let config = StartupCheckConfig {
             fails: 3,
             timeout: Duration::from_millis(1),
+            enabled: false,
         };
 
         let counter = Arc::new(Mutex::new(0));

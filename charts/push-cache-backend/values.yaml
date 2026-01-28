@@ -86,14 +86,7 @@ tolerations: []
 
 affinity: {}
 
-configs:
-  serviceconfig.yaml:
-    kafka:
-      offset_reset: earliest
-    startup_checks:
-      fails: 10
-      timeout: 10s
-      enabled: true
+configs: {}
 
 args:
   - start

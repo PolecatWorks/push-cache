@@ -305,6 +305,7 @@ mod tests {
             schema_registry_url: "http://localhost:8081".parse().unwrap(),
             cache_max_age: std::time::Duration::from_secs(60),
             fetch_metadata_timeout: std::time::Duration::from_secs(5),
+            offset_reset: crate::config::KafkaOffsetReset::Earliest,
         };
 
         let config = MyConfig {

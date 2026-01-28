@@ -76,5 +76,36 @@ fn benchmark_cache(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_cache);
+fn benchmark_growth(c: &mut Criterion) {
+    let mut group = c.benchmark_group("cache_growth");
+    // Define the sizes we want to test
+    let sizes = [100, 1_000, 10_000, 100_000, 1_000_000];
+
+    for size in sizes.iter() {
+        group.bench_with_input(
+            criterion::BenchmarkId::from_parameter(size),
+            size,
+            |b, &s| {
+                // Setup DashMap with s entries
+                let cache = Arc::new(DashMap::new());
+                let mut keys = Vec::with_capacity(s);
+                for i in 0..s {
+                    let key = format!("user_{}", i);
+                    cache.insert(key.clone(), create_customer(&key));
+                    keys.push(key);
+                }
+
+                // Bench get on a random key
+                b.iter(|| {
+                    let mut rng = rand::thread_rng();
+                    let key = keys.choose(&mut rng).unwrap();
+                    black_box(cache.get(key));
+                })
+            },
+        );
+    }
+    group.finish();
+}
+
+criterion_group!(benches, benchmark_cache, benchmark_growth);
 criterion_main!(benches);

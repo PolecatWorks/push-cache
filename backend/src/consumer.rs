@@ -10,6 +10,7 @@ use rdkafka::statistics::Statistics;
 use schema_registry_converter::schema_registry_common::BytesResult::Valid;
 use schema_registry_converter::schema_registry_common::get_bytes_result;
 use std::io::Cursor;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{error, info, warn};
 
 use crate::MyState;
@@ -19,20 +20,35 @@ use crate::model::Customer;
 // Context to handle statistics callbacks
 struct ConsumerStatsContext {
     state: MyState,
+    was_lagging: AtomicBool,
 }
 
 impl ClientContext for ConsumerStatsContext {
     fn stats(&self, statistics: Statistics) {
         let mut lag_total = 0;
+        let mut offsets = std::collections::HashMap::new();
         for (_topic, topic_stats) in statistics.topics {
-            for (_partition, part_stats) in topic_stats.partitions {
+            for (partition, part_stats) in topic_stats.partitions {
                 let lag = part_stats.consumer_lag;
                 if lag > 0 {
                     lag_total += lag;
                 }
+                offsets.insert(partition, part_stats.committed_offset);
             }
         }
         self.state.consumer_lag.set(lag_total);
+
+        let was_lagging = self.was_lagging.load(Ordering::Relaxed);
+        if lag_total > 0 && !was_lagging {
+            info!(
+                "Consumer lag started: {} (Offsets: {:?})",
+                lag_total, offsets
+            );
+            self.was_lagging.store(true, Ordering::Relaxed);
+        } else if lag_total == 0 && was_lagging {
+            info!("Consumer caught up (lag cleared) (Offsets: {:?})", offsets);
+            self.was_lagging.store(false, Ordering::Relaxed);
+        }
     }
 }
 
@@ -53,6 +69,7 @@ pub async fn start_consumer(state: MyState) -> Result<(), MyError> {
 
     let context = ConsumerStatsContext {
         state: state.clone(),
+        was_lagging: AtomicBool::new(false),
     };
 
     let consumer: StreamConsumer<ConsumerStatsContext> = ClientConfig::new()
@@ -61,7 +78,7 @@ pub async fn start_consumer(state: MyState) -> Result<(), MyError> {
         .set("enable.partition.eof", "false")
         .set("session.timeout.ms", "6000")
         .set("enable.auto.commit", "true")
-        .set("statistics.interval.ms", "5000")
+        .set("statistics.interval.ms", "1000")
         .set("auto.offset.reset", kafka_config.offset_reset.to_string())
         .create_with_context(context)?;
 

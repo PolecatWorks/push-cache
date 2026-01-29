@@ -91,15 +91,15 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
                         .get::<MatchedPath>()
                         .map(|matched_path| matched_path.as_str());
 
-                    tracing::info_span!(
+                    tracing::debug_span!(
                         "request",
                         method = ?request.method(),
                         uri = ?request.uri(),
                         matched_path = ?matched_path,
                     )
                 })
-                .on_request(DefaultOnRequest::new().level(Level::INFO))
-                .on_response(DefaultOnResponse::new().level(Level::INFO))
+                .on_request(DefaultOnRequest::new().level(Level::DEBUG))
+                .on_response(DefaultOnResponse::new().level(Level::DEBUG))
                 .on_failure(DefaultOnFailure::new().level(Level::ERROR)),
         )
         .layer(metric_layer)

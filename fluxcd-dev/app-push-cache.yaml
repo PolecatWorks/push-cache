@@ -32,6 +32,9 @@ spec:
       tag: main
       pullPolicy: Always # Dev ONLY
     configs:
+      webservice:
+        address: http://0.0.0.0:8080/cache
+        forwarding_headers: []
       kafka:
         group_id: pushcgroup
         topic: pcache-users

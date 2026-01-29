@@ -24,6 +24,13 @@ graph TD
     API -- JSON Response --> Client
 ```
 
+### Eviction Strategy
+
+The service does **not** implement an internal Time-To-Live (TTL) or Least Recently Used (LRU) eviction policy. Instead, it relies on **explicit upstream signals**:
+
+-   **Tombstone Events**: Records are removed from the cache only when a "tombstone" event (a record with a null value) is received from the Kafka topic.
+-   **Implication**: The upstream producer is responsible for managing the lifecycle of data. If the upstream does not send tombstones, the cache will grow indefinitely.
+
 ## Data Structures
 
 ### Customer Model

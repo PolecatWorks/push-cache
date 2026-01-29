@@ -62,5 +62,37 @@ fn benchmark_concurrent(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_concurrent);
+fn benchmark_concurrent_insert(c: &mut Criterion) {
+    let rt = Runtime::new().unwrap();
+    let concurrency = 100;
+
+    let mut group = c.benchmark_group("concurrent_insert_performance");
+    group.throughput(Throughput::Elements(concurrency as u64));
+
+    group.bench_function("insert_concurrent_100", |b| {
+        let cache = Arc::new(DashMap::new());
+        let customer = create_customer("temp");
+
+        b.to_async(&rt).iter(|| async {
+            let mut handles = Vec::with_capacity(concurrency);
+            for i in 0..concurrency {
+                let c = cache.clone();
+                let cust = customer.clone();
+                // Use a fixed set of keys per thread to avoid infinite memory growth
+                let key = format!("user_thread_{}", i);
+                handles.push(tokio::spawn(async move {
+                    c.insert(key, cust);
+                }));
+            }
+
+            for handle in handles {
+                handle.await.unwrap();
+            }
+        })
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, benchmark_concurrent, benchmark_concurrent_insert);
 criterion_main!(benches);

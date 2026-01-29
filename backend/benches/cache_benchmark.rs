@@ -109,5 +109,21 @@ fn benchmark_growth(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_cache, benchmark_growth);
+fn benchmark_insert(c: &mut Criterion) {
+    let mut group = c.benchmark_group("insert_performance");
+
+    // Benchmark raw insert speed (overwrite)
+    group.bench_function("insert_overwrite", |b| {
+        let cache = DashMap::new();
+        let customer = create_customer("temp");
+        b.iter(|| {
+            // Overwriting the same key to measure map overhead without memory growth
+            cache.insert("key".to_string(), customer.clone());
+        })
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, benchmark_cache, benchmark_growth, benchmark_insert);
 criterion_main!(benches);

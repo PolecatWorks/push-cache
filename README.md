@@ -198,3 +198,16 @@ Throughput with 100 concurrent tasks and varying state sizes.
 | 100,000 | ~1.16 M |
 | 1,000,000 | ~1.55 M |
 | 5,000,000 | (Incomplete) |
+
+### Insertion Performance
+
+| Benchmark | Result | Notes |
+| :--- | :--- | :--- |
+| Single Insert Latency | ~167 ns | Overwrite existing key |
+| Concurrent Insert Throughput | ~1.5 M QPS | 100 concurrent tasks |
+
+To run insertions:
+```bash
+cargo bench --bench cache_benchmark -- insert_performance
+cargo bench --bench concurrent_benchmark -- concurrent_insert_performance
+```

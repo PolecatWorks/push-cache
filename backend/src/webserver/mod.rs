@@ -16,8 +16,8 @@ use tracing::{Level, info};
 
 use crate::model::Customer;
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 use tokio_util::sync::CancellationToken;
+use url::Url;
 
 use crate::{MyState, error::MyError};
 
@@ -31,21 +31,9 @@ struct ListUsersParams {
 /// Service Configuration
 #[derive(Deserialize, Debug, Clone)]
 pub struct WebServiceConfig {
-    /// Prefix of the served API
-    pub prefix: String,
-    /// Hostname to start the webservice on
-    pub address: SocketAddr,
+    /// Hostname and prefix to start the webservice on
+    pub address: Url,
     pub forwarding_headers: Vec<String>,
-}
-
-impl Default for WebServiceConfig {
-    fn default() -> Self {
-        Self {
-            prefix: "/api".to_string(),
-            address: "0.0.0.0:8080".parse().unwrap(),
-            forwarding_headers: vec![],
-        }
-    }
 }
 
 // // Handler for POST /messages
@@ -68,21 +56,14 @@ where
 }
 
 pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), MyError> {
-    let prefix = state.config.webservice.prefix.clone();
-
     let shared_state = state.clone();
 
     let metric_layer = PrometheusMetricLayer::new();
 
     // Setup http server
     let app = Router::new()
-        // .nest("/users", users::user_apis())
-        // .nest("/services", services::service_apis())
-        // .nest("/dependencies", dependencies::dependency_apis())
-        .route("/hello", get(|| async { "Hello, World!" }))
-        .route("/users", post(create_user).get(list_users))
-        .route("/users/{account_id}", get(get_user).delete(delete_user))
-        // .route("/metrics", get(|| async move { metric_handle.render() }))
+        .route("/", post(create_user).get(list_users))
+        .route("/{account_id}", get(get_user).delete(delete_user))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &axum::http::Request<_>| {
@@ -105,19 +86,24 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
         .layer(metric_layer)
         .with_state(shared_state);
 
-    let prefix_app = Router::new().nest(&prefix, app);
+    let path = state.config.webservice.address.path();
+    let prefix_app = Router::new().nest(path, app);
 
     // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind(state.config.webservice.address).await?;
+    let host = state
+        .config
+        .webservice
+        .address
+        .host_str()
+        .unwrap_or("0.0.0.0");
+    let port = state.config.webservice.address.port().unwrap_or(8080);
+    let listener = tokio::net::TcpListener::bind(format!("{host}:{port}")).await?;
     let server = axum::serve(listener, prefix_app).with_graceful_shutdown(async move {
         // The move is necessary as with_graceful_shutdown requires static lifetime
         ct.cancelled().await
     });
 
-    info!(
-        "Server started on {}{prefix}",
-        state.config.webservice.address
-    );
+    info!("Server started on {}", state.config.webservice.address);
 
     Ok(server.await?)
 }
@@ -316,8 +302,7 @@ mod tests {
                 name: "test".to_string(),
             },
             webservice: WebServiceConfig {
-                prefix: "/api".to_string(),
-                address: "0.0.0.0:8080".parse().unwrap(),
+                address: "http://0.0.0.0:8080/api".parse().unwrap(),
                 forwarding_headers: vec![],
             },
             kafka: kafka_config,
@@ -336,7 +321,7 @@ mod tests {
         let state = get_test_state().await;
 
         let app = Router::new()
-            .route("/users", post(create_user))
+            .route("/", post(create_user))
             .with_state(state.clone());
 
         let customer = Customer {
@@ -352,7 +337,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/users")
+                    .uri("/")
                     .header("Content-Type", "application/json")
                     .body(Body::from(serde_json::to_vec(&customer).unwrap()))
                     .unwrap(),
@@ -381,14 +366,14 @@ mod tests {
             .insert(customer.accountId.clone(), customer.clone());
 
         let app = Router::new()
-            .route("/users", post(create_user))
+            .route("/", post(create_user))
             .with_state(state.clone());
 
         let response = app
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/users")
+                    .uri("/")
                     .header("Content-Type", "application/json")
                     .body(Body::from(serde_json::to_vec(&customer).unwrap()))
                     .unwrap(),
@@ -413,14 +398,14 @@ mod tests {
         state.cache.insert("to_delete".to_string(), customer);
 
         let app = Router::new()
-            .route("/users/{account_id}", delete(delete_user))
+            .route("/{account_id}", delete(delete_user))
             .with_state(state.clone());
 
         let response = app
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri("/users/to_delete")
+                    .uri("/to_delete")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -435,14 +420,14 @@ mod tests {
     async fn test_delete_user_not_found() {
         let state = get_test_state().await;
         let app = Router::new()
-            .route("/users/{account_id}", delete(delete_user))
+            .route("/{account_id}", delete(delete_user))
             .with_state(state.clone());
 
         let response = app
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri("/users/nonexistent")
+                    .uri("/nonexistent")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -479,16 +464,11 @@ mod tests {
         );
 
         let app = Router::new()
-            .route("/users", get(list_users))
+            .route("/", get(list_users))
             .with_state(state.clone());
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/users")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
             .await
             .unwrap();
 
@@ -521,14 +501,14 @@ mod tests {
         }
 
         let app = Router::new()
-            .route("/users", get(list_users))
+            .route("/", get(list_users))
             .with_state(state.clone());
 
         // Limit 2, Offset 1 -> user1, user2 (user0, user1, user2, user3, user4 sorted)
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/users?limit=2&offset=1")
+                    .uri("/?limit=2&offset=1")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -582,13 +562,13 @@ mod tests {
         );
 
         let app = Router::new()
-            .route("/users", get(list_users))
+            .route("/", get(list_users))
             .with_state(state.clone());
 
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/users?filter=ap")
+                    .uri("/?filter=ap")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -620,16 +600,11 @@ mod tests {
         state.cache.insert("123".to_string(), customer);
 
         let app = Router::new()
-            .route("/users/{account_id}", get(get_user))
+            .route("/{account_id}", get(get_user))
             .with_state(state);
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/users/123")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri("/123").body(Body::empty()).unwrap())
             .await
             .unwrap();
 
@@ -648,16 +623,11 @@ mod tests {
         let state = get_test_state().await;
 
         let app = Router::new()
-            .route("/users/{account_id}", get(get_user))
+            .route("/{account_id}", get(get_user))
             .with_state(state);
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/users/999")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri("/999").body(Body::empty()).unwrap())
             .await
             .unwrap();
 

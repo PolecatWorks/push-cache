@@ -66,16 +66,16 @@ echo "Server is UP!"
 # But `populate_kafka` prints "Produced AccountID: <id>". We didn't capture it.
 # Alternative: Query /api/users (list) to get an ID.
 echo "Fetching a valid user ID..."
-USER_ID=$(curl -s "http://localhost:8080/cache/users?limit=1" | grep -o '"[^"]*"' | head -n 1 | tr -d '"')
+USER_ID=$(curl -s "http://localhost:8080/cache?limit=1" | grep -o '"[^"]*"' | head -n 1 | tr -d '"')
 
 if [ -z "$USER_ID" ]; then
     echo "Could not find any users in cache. Did population fail?"
     exit 1
 fi
 
-echo "Running Load Test against /users/$USER_ID"
+echo "Running Load Test against /$USER_ID"
 echo "Concurrency: $CONCURRENCY, Duration: $DURATION"
 
-oha -c $CONCURRENCY -z $DURATION "http://localhost:8080/cache/users/$USER_ID"
+oha -c $CONCURRENCY -z $DURATION "http://localhost:8080/cache/$USER_ID"
 
 echo "Load Test Complete."

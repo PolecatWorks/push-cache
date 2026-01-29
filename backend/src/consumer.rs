@@ -1,4 +1,6 @@
+use crate::kafka_utils::get_broker_string;
 use apache_avro::{AvroSchema, from_avro_datum};
+
 use futures::TryStreamExt;
 use rdkafka::Message;
 use rdkafka::client::ClientContext;
@@ -55,13 +57,7 @@ pub async fn start_consumer(state: MyState) -> Result<(), MyError> {
 
     let consumer: StreamConsumer<ConsumerStatsContext> = ClientConfig::new()
         .set("group.id", &group_id)
-        .set(
-            "bootstrap.servers",
-            kafka_config
-                .brokers
-                .host_str()
-                .ok_or_else(|| MyError::Message("Failed to get Kafka broker host".to_owned()))?,
-        )
+        .set("bootstrap.servers", &get_broker_string(kafka_config)?)
         .set("enable.partition.eof", "false")
         .set("session.timeout.ms", "6000")
         .set("enable.auto.commit", "true")

@@ -7,7 +7,7 @@ use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use std::path::PathBuf;
 use std::time::Duration;
-use tracing::info;
+use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -33,7 +33,9 @@ async fn main() {
     // Initialize logger
     let env = EnvFilter::builder()
         .with_default_directive(tracing::level_filters::LevelFilter::INFO.into())
-        .from_env_lossy();
+        .with_env_var("CAPTURE_LOG")
+        .from_env()
+        .expect("Failed to load env filter");
     tracing_subscriber::fmt().with_env_filter(env).init();
 
     // Load Config
@@ -43,7 +45,11 @@ async fn main() {
         .expect("Failed to load config");
 
     let producer: FutureProducer = ClientConfig::new()
-        .set("bootstrap.servers", config.kafka.brokers.as_str())
+        .set(
+            "bootstrap.servers",
+            push_cache::kafka_utils::get_broker_string(&config.kafka)
+                .expect("Failed to get broker string"),
+        )
         .set("message.timeout.ms", "5000")
         .create()
         .expect("Producer creation error");
@@ -60,9 +66,9 @@ async fn main() {
         let customer = manual_fake_customer();
 
         // Serialize to Avro bytes
-        let mut writer = apache_avro::Writer::new(&schema, Vec::new());
-        writer.append_ser(customer.clone()).unwrap();
-        let encoded = writer.into_inner().unwrap();
+        let encoded =
+            apache_avro::to_avro_datum(&schema, apache_avro::to_value(customer.clone()).unwrap())
+                .unwrap();
 
         // Add Confluent Magic Byte (0) + Schema ID (4 bytes)
         // Using ID 1 for testing
@@ -78,10 +84,13 @@ async fn main() {
                 Duration::from_secs(0),
             )
             .await;
-        info!("Produced AccountID: {}", customer.accountId);
+        debug!("Produced AccountID: {}", customer.accountId);
     }
 
-    info!("Done!");
+    info!(
+        "Produced {} records to topic {}",
+        args.count, config.kafka.topic
+    );
 }
 
 fn manual_fake_customer() -> Customer {

@@ -12,6 +12,16 @@ use url::Url;
 
 use crate::{config::MyKafkaConfig, error::MyError};
 
+pub fn get_broker_string(config: &MyKafkaConfig) -> Result<String, MyError> {
+    let host = config.brokers.host_str().ok_or_else(|| {
+        MyError::Message(format!("Kafka broker host not defined {}", config.brokers))
+    })?;
+    let port = config.brokers.port().ok_or_else(|| {
+        MyError::Message(format!("Kafka broker port not defined {}", config.brokers))
+    })?;
+    Ok(format!("{host}:{port}"))
+}
+
 /// Checks if the Schema Registry is reachable and supports the specified schema type.
 ///
 /// # Arguments
@@ -73,20 +83,7 @@ pub async fn check_schema_registry(url: &Url, schema_type: &str) -> Result<(), M
 /// * The specified topic does not exist or has no partitions.
 pub async fn check_kafka_metadata(config: &MyKafkaConfig) -> Result<(), MyError> {
     let consumer: BaseConsumer = ClientConfig::new()
-        .set(
-            "bootstrap.servers",
-            format!(
-                "{}:{}",
-                config.brokers.host_str().ok_or_else(|| {
-                    warn!("Kafka broker host not defined {:?}", config.brokers.host());
-                    MyError::Message(format!("Kafka broker host not defined {}", config.brokers))
-                })?,
-                config.brokers.port().ok_or_else(|| {
-                    warn!("Kafka broker port not defined {:?}", config.brokers.port());
-                    MyError::Message(format!("Kafka broker port not defined {}", config.brokers))
-                })?,
-            ),
-        )
+        .set("bootstrap.servers", &get_broker_string(config)?)
         .create()?;
 
     // Fetch metadata for the specific topic

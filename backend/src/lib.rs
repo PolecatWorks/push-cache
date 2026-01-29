@@ -21,7 +21,7 @@ pub mod config;
 pub mod consumer;
 pub mod error;
 pub mod hams;
-mod kafka_utils;
+pub mod kafka_utils;
 mod metrics;
 pub mod model;
 mod startup_tools;

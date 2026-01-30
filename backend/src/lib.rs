@@ -1,4 +1,8 @@
-use std::{collections::HashSet, ffi::c_void, sync::Arc};
+use std::{
+    collections::HashSet,
+    ffi::c_void,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use axum_prometheus::metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use dashmap::DashMap;
@@ -46,6 +50,7 @@ pub struct MyState {
     pub cache_size: Box<IntGauge>,
     pub consumer_lag: Box<IntGauge>,
     pub valid_schema_ids: Vec<u32>,
+    pub startup_lag_cleared: Arc<AtomicBool>,
 
     registry: Registry,
     prometheus_handle: Arc<PrometheusHandle>,
@@ -132,6 +137,7 @@ impl MyState {
             cache_size: Box::new(cache_size),
             consumer_lag: Box::new(consumer_lag),
             valid_schema_ids: valid_schema_ids_vec,
+            startup_lag_cleared: Arc::new(AtomicBool::new(false)),
 
             registry,
             prometheus_handle: Arc::new(metric_handle),

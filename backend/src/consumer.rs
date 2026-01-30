@@ -44,9 +44,18 @@ impl ClientContext for ConsumerStatsContext {
             if !was_lagging {
                 self.was_lagging.store(true, Ordering::Relaxed);
             }
-        } else if lag_total == 0 && was_lagging {
-            info!("Consumer caught up (lag cleared) (Offsets: {:?})", offsets);
-            self.was_lagging.store(false, Ordering::Relaxed);
+        } else if lag_total == 0 {
+            if was_lagging {
+                info!("Consumer caught up (lag cleared) (Offsets: {:?})", offsets);
+                self.was_lagging.store(false, Ordering::Relaxed);
+            }
+
+            if !self.state.startup_lag_cleared.load(Ordering::Relaxed) {
+                info!("Startup lag cleared, application is now Ready");
+                self.state
+                    .startup_lag_cleared
+                    .store(true, Ordering::Relaxed);
+            }
         }
     }
 }

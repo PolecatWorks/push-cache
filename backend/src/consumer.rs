@@ -39,12 +39,11 @@ impl ClientContext for ConsumerStatsContext {
         self.state.consumer_lag.set(lag_total);
 
         let was_lagging = self.was_lagging.load(Ordering::Relaxed);
-        if lag_total > 0 && !was_lagging {
-            info!(
-                "Consumer lag started: {} (Offsets: {:?})",
-                lag_total, offsets
-            );
-            self.was_lagging.store(true, Ordering::Relaxed);
+        if lag_total > 0 {
+            info!("Consumer lag: {} (Offsets: {:?})", lag_total, offsets);
+            if !was_lagging {
+                self.was_lagging.store(true, Ordering::Relaxed);
+            }
         } else if lag_total == 0 && was_lagging {
             info!("Consumer caught up (lag cleared) (Offsets: {:?})", offsets);
             self.was_lagging.store(false, Ordering::Relaxed);

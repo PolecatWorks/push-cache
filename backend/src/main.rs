@@ -2,9 +2,6 @@ use std::{path::PathBuf, process::ExitCode};
 
 use clap::{Parser, Subcommand};
 
-// use ffi_log2::log_param;
-// use hamsrs::hams_logger_init;
-
 use ffi_log2::log_param;
 use hamsrs::hams_logger_init;
 use push_cache::config::MyConfig;

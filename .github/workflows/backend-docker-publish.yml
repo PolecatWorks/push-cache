@@ -72,7 +72,11 @@ jobs:
         run: |
           platform=${{ matrix.platform }}
           repo_name="${{ github.repository }}"
-          echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend" >> $GITHUB_ENV
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend/dev" >> $GITHUB_ENV
+          else
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend" >> $GITHUB_ENV
+          fi
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
       # Set up BuildKit Docker container builder

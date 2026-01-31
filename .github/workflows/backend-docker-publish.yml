@@ -159,7 +159,15 @@ jobs:
     needs:
       - build
     steps:
-      - *prepare_step
+      - name: Prepare environment
+        run: |
+          repo_name="${{ github.repository }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend/dev" >> $GITHUB_ENV
+          else
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend" >> $GITHUB_ENV
+          fi
+
       - name: Download digests
         uses: actions/download-artifact@v6
         with:
@@ -171,7 +179,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}
           annotations: |
             type=org.opencontainers.image.description,value=${{ github.event.repository.description || 'No description provided' }}
           tags: |

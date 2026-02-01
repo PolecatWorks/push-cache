@@ -34,6 +34,7 @@ pub struct WebServiceConfig {
     /// Hostname and prefix to start the webservice on
     pub address: Url,
     pub forwarding_headers: Vec<String>,
+    pub path_dynamic: String,
 }
 
 // // Handler for POST /messages
@@ -87,7 +88,16 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
         .with_state(shared_state);
 
     let path = state.config.webservice.address.path();
-    let prefix_app = Router::new().nest(path, app);
+    let dynamic_path = &state.config.webservice.path_dynamic;
+
+    let dynamic_app = Router::new()
+        // ToDo: Add middleware and metrics to dynamic app
+        .route("/{account_id}", get(get_dynamic_user))
+        .with_state(state.clone());
+
+    let prefix_app = Router::new()
+        .nest(path, app)
+        .nest(dynamic_path, dynamic_app);
 
     // run our app with hyper, listening globally on port 3000
     let host = state
@@ -214,6 +224,74 @@ async fn list_users(
     Ok(Json(paged_keys))
 }
 
+/// Handler for GET /dynamic/{account_id}
+/// Retrieves a customer by their Account ID from the dynamic cache.
+/// Returns 200 OK with the customer data as JSON if found, or 404 Not Found.
+async fn get_dynamic_user(
+    State(state): State<MyState>,
+    Path(account_id): Path<String>,
+) -> Result<impl IntoResponse, MyError> {
+    use apache_avro::{AvroSchema, from_avro_datum};
+    use std::io::Cursor;
+
+    if let Some(payload) = state.dynamic_cache.get(&account_id) {
+        // Deserialize Avro to Generic Value or Customer
+        // We use Customer schema as writer schema
+        match from_avro_datum(
+            &Customer::get_schema(),
+            &mut Cursor::new(payload.value()),
+            None,
+        ) {
+            Ok(avro_value) => {
+                // Convert Avro Value to JSON
+                // apache_avro::types::Value implements Serialize, so we can wrap it in Json
+                // But wait, axum::Json requires Serialize.
+                // Let's check if we can return Json(avro_value).
+                // Or maybe we want to convert to Customer struct first?
+                // "convert it to json" - converting to Customer first is safer if we want to ensure it matches our model.
+                // But converting directly to JSON is also fine if we just want to expose what's there.
+                // However, `apache_avro::types::Value` does not strictly implement `serde::Serialize` in a way that maps 1:1 to JSON always (e.g. unions).
+                // But `apache_avro::from_value::<Customer>(&avro_value)` is checking against our struct.
+                // Let's stick to the same logic as the consumer: convert to Customer.
+
+                match apache_avro::from_value::<Customer>(&avro_value) {
+                    Ok(customer) => {
+                        // Headers
+                        let mut headers = HeaderMap::new();
+                        let max_age = state.config.kafka.cache_max_age;
+                        headers.insert(
+                            "Cache-Control",
+                            format!("public, max-age={}", max_age.as_secs())
+                                .parse()
+                                .unwrap(),
+                        );
+                        headers.insert(
+                            "ETag",
+                            format!("\"{}\"", customer.updatedAt).parse().unwrap(),
+                        );
+                        return Ok((headers, Json(customer)));
+                    }
+                    Err(e) => {
+                        return Err(MyError::Message(format!(
+                            "Failed to convert Avro to Customer: {}",
+                            e
+                        )));
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(MyError::Message(format!(
+                    "Failed to deserialize Avro datum: {}",
+                    e
+                )));
+            }
+        }
+    }
+
+    state.requests_miss.inc();
+    Err(MyError::NotFound("User not found in dynamic cache".into()))
+}
+
 impl IntoResponse for MyError {
     fn into_response(self) -> Response {
         #[derive(Serialize)]
@@ -304,6 +382,7 @@ mod tests {
             webservice: WebServiceConfig {
                 address: "http://0.0.0.0:8080/api".parse().unwrap(),
                 forwarding_headers: vec![],
+                path_dynamic: "/dynamic".to_string(),
             },
             kafka: kafka_config,
             startup_checks: crate::config::StartupCheckConfig {
@@ -632,5 +711,59 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+    #[tokio::test]
+    async fn test_get_dynamic_user() {
+        use apache_avro::{AvroSchema, to_avro_datum, to_value};
+
+        let state = get_test_state().await;
+
+        let customer = Customer {
+            accountId: "dyn_user".to_string(),
+            name: "Dynamic User".to_string(),
+            address: "Dyn Address".to_string(),
+            phone: "999".to_string(),
+            createdAt: 300,
+            updatedAt: 400,
+        };
+
+        // Serialize to Avro
+        let schema = Customer::get_schema();
+        let encoded = to_avro_datum(&schema, to_value(&customer).unwrap()).unwrap();
+
+        state.dynamic_cache.insert("dyn_user".to_string(), encoded);
+
+        // We need to use the full path including prefix_dynamic which is "/dynamic"
+        // But in `get_test_state`, we set `prefix_dynamic: "/dynamic"`.
+        // And `start_app_api` nests `dynamic_app` under this prefix.
+        // However, here we are testing `get_dynamic_user` directly via Router?
+        // No, we should test the router setup or just the handler?
+        // The previous tests test the `app` constructed manually.
+        // `test_get_user_found` constructs `Router::new().route...`
+
+        let app = Router::new()
+            .route("/{account_id}", get(get_dynamic_user))
+            .with_state(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/dyn_user")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let received_customer: Customer = serde_json::from_slice(&body_bytes).unwrap();
+
+        // basic check
+        assert_eq!(received_customer.accountId, customer.accountId);
+        assert_eq!(received_customer.name, customer.name);
     }
 }

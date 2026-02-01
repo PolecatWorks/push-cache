@@ -116,6 +116,15 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
                             return Ok(());
                         }
 
+                        // Update dynamic cache
+                        if let Some(key_bytes) = borrowed_message.key() {
+                            if let Ok(key_str) = std::str::from_utf8(key_bytes) {
+                                state
+                                    .dynamic_cache
+                                    .insert(key_str.to_string(), payload.clone());
+                            }
+                        }
+
                         // Use static schema for deserialization
                         // Note: from_avro_datum requires the Writer Schema (which we assume matches Customer::get_schema)
                         // If schema registry returns a different ID, technically we should fetch THAT schema to read.
@@ -161,6 +170,7 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
                             if state.cache.remove(key_str).is_some() {
                                 state.cache_size.dec();
                             }
+                            state.dynamic_cache.remove(key_str);
                             info!("Removed record for key: {}", key_str);
                         }
                     } else {

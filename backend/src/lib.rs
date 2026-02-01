@@ -42,6 +42,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct MyState {
     config: MyConfig,
     pub cache: Arc<DashMap<String, Customer>>,
+    pub dynamic_cache: Arc<DashMap<String, Vec<u8>>>,
     // Metrics
     pub requests_total: Box<IntCounter>,
     pub requests_miss: Box<IntCounter>,
@@ -130,6 +131,7 @@ impl MyState {
         Ok(MyState {
             config: config.clone(),
             cache: Arc::new(DashMap::new()),
+            dynamic_cache: Arc::new(DashMap::new()),
             requests_total: Box::new(requests_total),
             requests_miss: Box::new(requests_miss),
             updates_received: Box::new(updates_received),

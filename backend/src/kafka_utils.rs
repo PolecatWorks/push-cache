@@ -151,3 +151,35 @@ pub async fn get_schema_id<T: AvroSchema>(
         "Got a schema that was not Record".to_string(),
     ))
 }
+
+pub async fn fetch_schema_by_id(registry_url: &str, id: u32) -> Result<Schema, MyError> {
+    use schema_registry_converter::async_impl::schema_registry::get_schema_by_id;
+
+    info!(
+        "Fetching ID {} from Schema Registry at {}",
+        id, registry_url
+    );
+    let sr_settings = SrSettings::new(registry_url.to_owned());
+
+    let schema_result = get_schema_by_id(id, &sr_settings).await.map_err(|e| {
+        error!("Failed to fetch schema {id}: {e:?}");
+        MyError::Message(format!("Failed to fetch schema {id}: {e:?}"))
+    })?;
+
+    // schema_result.schema is String (Avro JSON), parse it to Schema
+    // The SuppliedSchema struct contains the schema as a String if it's Avro.
+    // Wait, get_schema_by_id returns SuppliedSchema.
+
+    match schema_result.schema_type {
+        SchemaType::Avro => {
+            let schema = Schema::parse_str(&schema_result.schema).map_err(|e| {
+                MyError::Message(format!("Failed to parse fetched schema {id}: {e}"))
+            })?;
+            Ok(schema)
+        }
+        _ => Err(MyError::Message(format!(
+            "Schema {id} is not Avro",
+            id = id
+        ))),
+    }
+}

@@ -107,52 +107,78 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
                     let bytes_result = get_bytes_result(Some(payload));
 
                     if let Valid(msg_id, payload) = bytes_result {
-                        if !state.valid_schema_ids.contains(&msg_id) {
+                        // Check if schema is in cache, if not fetch it
+                        if !state.schema_cache.contains_key(&msg_id) {
+                            // We need registry URL
+                            let registry_url = &state.config.kafka.schema_registry_url;
+                            match crate::kafka_utils::fetch_schema_by_id(
+                                registry_url.as_str(),
+                                msg_id,
+                            )
+                            .await
+                            {
+                                Ok(schema) => {
+                                    state.schema_cache.insert(msg_id, schema);
+                                    info!("Cached schema for ID: {}", msg_id);
+                                }
+                                Err(e) => {
+                                    error!("Failed to fetch schema {}: {}", msg_id, e);
+                                    // Decide if we should skip processing or continue?
+                                    // For dynamic cache we might need the schema later.
+                                    // But if we fail here, we can retry later or just log error.
+                                }
+                            }
+                        }
+
+                        // Update dynamic cache with FULL payload
+                        if let Some(key_bytes) = borrowed_message.key() {
+                            if let Ok(key_str) = std::str::from_utf8(key_bytes) {
+                                if let Some(full_payload) = borrowed_message.payload() {
+                                    state
+                                        .dynamic_cache
+                                        .insert(key_str.to_string(), full_payload.to_vec());
+                                }
+                            }
+                        }
+
+                        if state.valid_schema_ids.contains(&msg_id) {
+                            // Use static schema for deserialization
+                            // Note: from_avro_datum requires the Writer Schema (which we assume matches Customer::get_schema)
+                            // If schema registry returns a different ID, technically we should fetch THAT schema to read.
+                            // But per requirements, we are using Static Schema "Customer".
+                            // Safest path: from_avro_datum(&Customer::get_schema(), &mut Cursor::new(payload), None)
+
+                            match from_avro_datum(
+                                &Customer::get_schema(),
+                                &mut Cursor::new(payload),
+                                None,
+                            ) {
+                                Ok(val) => match apache_avro::from_value::<Customer>(&val) {
+                                    Ok(customer) => {
+                                        state.updates_received.inc();
+                                        use dashmap::mapref::entry::Entry;
+                                        match state.cache.entry(customer.accountId.clone()) {
+                                            Entry::Vacant(entry) => {
+                                                entry.insert(customer);
+                                                state.cache_size.inc();
+                                            }
+                                            Entry::Occupied(mut entry) => {
+                                                entry.insert(customer);
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to convert Avro value to Customer: {}", e)
+                                    }
+                                },
+                                Err(e) => error!("Failed to deserialize Avro datum: {}", e),
+                            }
+                        } else {
                             error!(
                                 "Schema mismatch! Expected one of: {:?}, Found: {}",
                                 state.valid_schema_ids, msg_id
                             );
                             state.schema_mismatch_count.inc();
-                            return Ok(());
-                        }
-
-                        // Update dynamic cache
-                        if let Some(key_bytes) = borrowed_message.key() {
-                            if let Ok(key_str) = std::str::from_utf8(key_bytes) {
-                                state
-                                    .dynamic_cache
-                                    .insert(key_str.to_string(), payload.clone());
-                            }
-                        }
-
-                        // Use static schema for deserialization
-                        // Note: from_avro_datum requires the Writer Schema (which we assume matches Customer::get_schema)
-                        // If schema registry returns a different ID, technically we should fetch THAT schema to read.
-                        // But per requirements, we are using Static Schema "Customer".
-                        // Safest path: from_avro_datum(&Customer::get_schema(), &mut Cursor::new(payload), None)
-
-                        match from_avro_datum(
-                            &Customer::get_schema(),
-                            &mut Cursor::new(payload),
-                            None,
-                        ) {
-                            Ok(val) => match apache_avro::from_value::<Customer>(&val) {
-                                Ok(customer) => {
-                                    state.updates_received.inc();
-                                    use dashmap::mapref::entry::Entry;
-                                    match state.cache.entry(customer.accountId.clone()) {
-                                        Entry::Vacant(entry) => {
-                                            entry.insert(customer);
-                                            state.cache_size.inc();
-                                        }
-                                        Entry::Occupied(mut entry) => {
-                                            entry.insert(customer);
-                                        }
-                                    }
-                                }
-                                Err(e) => error!("Failed to convert Avro value to Customer: {}", e),
-                            },
-                            Err(e) => error!("Failed to deserialize Avro datum: {}", e),
                         }
                     } else {
                         // Invalid or Null payload handled here?

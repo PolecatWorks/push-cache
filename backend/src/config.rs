@@ -54,18 +54,20 @@
 //!   name: "push-cache"
 //! webservice:
 //!   prefix: "/cache"
-//!   address: "0.0.0.0:8080"
+//!   address: "http://0.0.0.0:8080"
 //!   forwarding_headers: []
 //! kafka:
 //!   brokers: "tcp://localhost:9092"
 //!   group_id: "push-cache"
 //!   topic: "users"
 //!   schema_registry_url: "http://localhost:8081"
-//!   cache_max_age_seconds: 60
+//!   cache_max_age: 60s
 //!   fetch_metadata_timeout: 5s
+//!   offset_reset: earliest
 //! startup_checks:
 //!   fails: 2
 //!   timeout: 5s
+//!   enabled: true
 //! "#;
 //!
 //! let secrets_path = "/path/to/secrets";

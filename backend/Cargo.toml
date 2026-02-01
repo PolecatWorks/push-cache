@@ -25,24 +25,24 @@ prometheus = "^0.14"
 tracing = "^0.1"
 tracing-opentelemetry = "^0.32"
 tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
-axum-prometheus = "^0.9"
+axum-prometheus = "^0.10"
 
 
 thiserror = "^2.0"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-tower-http = { version = "0.6", features = ["trace"] }
+reqwest = { version = "^0.13", default-features = false, features = ["json"] }
+tower-http = { version = "^0.6", features = ["trace"] }
 tokio-util = "^0.7"
 serde_with = "^3.12"
 humantime-serde = "^1.1"
 chrono = { version = "^0.4", features = ["serde"] }
 futures = "~0.3"
 kafka = "~0.10"
-rdkafka = "~0.38"
+rdkafka = "^0.39"
 
 
 
 dashmap = "^6.0"
-apache-avro = { version = "^0.16", features = ["derive"] }
+apache-avro = { version = "^0.21", features = ["derive"] }
 hamsrs = { git = "https://github.com/PolecatWorks/hams.git" }
 ffi-log2 = { git = "https://github.com/PolecatWorks/hams.git" }
 schema_registry_converter = { version = "4.0.0", features = ["avro", "json", "blocking"] }
@@ -50,7 +50,7 @@ schema_registry_converter = { version = "4.0.0", features = ["avro", "json", "bl
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }
 fake = { version = "2.9", features = ["derive", "chrono"] }
-rand = "0.8"
+rand = "^0.9"
 uuid = { version = "1.0", features = ["v4"] }
 tower = { version = "0.5", features = ["util"] }
 

@@ -940,7 +940,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 [[package]]
 name = "ffi-log2"
 version = "0.1.0"
-source = "git+https://github.com/PolecatWorks/hams.git#310aaecbfc9ad493a3dfbfb1050f6360511915c2"
+source = "git+https://github.com/PolecatWorks/hams.git#ec5ece5417ea96efd0442c99698465590251e5eb"
 dependencies = [
  "cbindgen",
  "log",
@@ -1187,7 +1187,7 @@ dependencies = [
 [[package]]
 name = "hams"
 version = "0.3.0"
-source = "git+https://github.com/PolecatWorks/hams.git#310aaecbfc9ad493a3dfbfb1050f6360511915c2"
+source = "git+https://github.com/PolecatWorks/hams.git#ec5ece5417ea96efd0442c99698465590251e5eb"
 dependencies = [
  "aquamarine",
  "async-trait",
@@ -1212,7 +1212,7 @@ dependencies = [
 [[package]]
 name = "hamsrs"
 version = "0.3.0"
-source = "git+https://github.com/PolecatWorks/hams.git#310aaecbfc9ad493a3dfbfb1050f6360511915c2"
+source = "git+https://github.com/PolecatWorks/hams.git#ec5ece5417ea96efd0442c99698465590251e5eb"
 dependencies = [
  "derive_builder",
  "ffi-log2",

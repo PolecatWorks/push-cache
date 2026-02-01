@@ -16,11 +16,13 @@ use tracing::{error, info, warn};
 use crate::MyState;
 use crate::error::MyError;
 use crate::model::Customer;
+use hamsrs::probes::ProbeManual;
 
 // Context to handle statistics callbacks
 struct ConsumerStatsContext {
     state: MyState,
     was_lagging: AtomicBool,
+    lag_probe: ProbeManual,
 }
 
 impl ClientContext for ConsumerStatsContext {
@@ -55,6 +57,9 @@ impl ClientContext for ConsumerStatsContext {
                 self.state
                     .startup_lag_cleared
                     .store(true, Ordering::Relaxed);
+                if let Err(e) = self.lag_probe.enable() {
+                    error!("Failed to enable lag probe: {}", e);
+                }
             }
         }
     }
@@ -62,7 +67,7 @@ impl ClientContext for ConsumerStatsContext {
 
 impl ConsumerContext for ConsumerStatsContext {}
 
-pub async fn start_consumer(state: MyState) -> Result<(), MyError> {
+pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<(), MyError> {
     let kafka_config = &state.config.kafka;
     info!("Starting Kafka Consumer for topic: {}", kafka_config.topic);
 
@@ -78,6 +83,7 @@ pub async fn start_consumer(state: MyState) -> Result<(), MyError> {
     let context = ConsumerStatsContext {
         state: state.clone(),
         was_lagging: AtomicBool::new(false),
+        lag_probe,
     };
 
     let consumer: StreamConsumer<ConsumerStatsContext> = ClientConfig::new()

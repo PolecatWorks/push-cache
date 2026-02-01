@@ -8,6 +8,7 @@ use axum_prometheus::metrics_exporter_prometheus::{PrometheusBuilder, Prometheus
 use dashmap::DashMap;
 
 use hamsrs::Hams;
+use hamsrs::probes::ProbeManual;
 use prometheus::{IntCounter, IntGauge, Registry};
 
 use tokio_util::sync::CancellationToken;
@@ -161,7 +162,13 @@ pub async fn service_cancellable(ct: CancellationToken, config: &MyConfig) -> Re
     config.name = NAME.to_owned();
     config.version = VERSION.to_owned();
 
+    config.version = VERSION.to_owned();
+
     let hams = Hams::new(ct.clone(), &config).unwrap();
+
+    let lag_probe = ProbeManual::new("lag-cleared", false).unwrap();
+    hams.ready_insert(lag_probe.clone())?;
+    hams.startup_insert(lag_probe.clone())?;
 
     unsafe {
         hams.register_prometheus(
@@ -176,7 +183,8 @@ pub async fn service_cancellable(ct: CancellationToken, config: &MyConfig) -> Re
 
     // Start Kafka Consumer
     let consumer_state = state.clone();
-    tokio::spawn(async move { consumer::start_consumer(consumer_state).await });
+    let safe_probe = lag_probe.clone();
+    tokio::spawn(async move { consumer::start_consumer(consumer_state, safe_probe).await });
 
     let server = start_app_api(state.clone(), ct.clone());
 

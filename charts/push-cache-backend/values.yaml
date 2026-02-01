@@ -23,6 +23,13 @@ readinessProbe:
     path: /hams/ready
   periodSeconds: 5
 
+startupProbe:
+  httpGet:
+    port: http-health
+    path: /hams/startup
+  failureThreshold: 30
+  periodSeconds: 10
+
 image: &image
   repository: polecatworks/push-cache-backend
   tag: latest

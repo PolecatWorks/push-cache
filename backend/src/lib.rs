@@ -163,12 +163,14 @@ pub async fn service_cancellable(ct: CancellationToken, config: &MyConfig) -> Re
 
     let hams = Hams::new(ct.clone(), &config).unwrap();
 
-    hams.register_prometheus(
-        // prometheus_response,
-        prometheus_response_mystate,
-        prometheus_response_free,
-        &state as *const _ as *const c_void,
-    )?;
+    unsafe {
+        hams.register_prometheus(
+            // prometheus_response,
+            prometheus_response_mystate,
+            prometheus_response_free,
+            &state as *const _ as *const c_void,
+        )
+    }?;
 
     hams.start().unwrap();
 

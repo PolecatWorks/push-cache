@@ -4,6 +4,7 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
 };
 
+use apache_avro::Schema;
 use axum_prometheus::metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use dashmap::DashMap;
 
@@ -43,6 +44,7 @@ pub struct MyState {
     config: MyConfig,
     pub cache: Arc<DashMap<String, Customer>>,
     pub dynamic_cache: Arc<DashMap<String, Vec<u8>>>,
+    pub schema_cache: Arc<DashMap<u32, Schema>>,
     // Metrics
     pub requests_total: Box<IntCounter>,
     pub requests_miss: Box<IntCounter>,
@@ -132,6 +134,7 @@ impl MyState {
             config: config.clone(),
             cache: Arc::new(DashMap::new()),
             dynamic_cache: Arc::new(DashMap::new()),
+            schema_cache: Arc::new(DashMap::new()),
             requests_total: Box::new(requests_total),
             requests_miss: Box::new(requests_miss),
             updates_received: Box::new(updates_received),

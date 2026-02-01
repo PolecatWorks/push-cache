@@ -231,60 +231,69 @@ async fn get_dynamic_user(
     State(state): State<MyState>,
     Path(account_id): Path<String>,
 ) -> Result<impl IntoResponse, MyError> {
-    use apache_avro::{AvroSchema, from_avro_datum};
+    use apache_avro::from_avro_datum;
+    use schema_registry_converter::schema_registry_common::BytesResult::Valid;
+    use schema_registry_converter::schema_registry_common::get_bytes_result;
     use std::io::Cursor;
 
-    if let Some(payload) = state.dynamic_cache.get(&account_id) {
-        // Deserialize Avro to Generic Value or Customer
-        // We use Customer schema as writer schema
-        match from_avro_datum(
-            &Customer::get_schema(),
-            &mut Cursor::new(payload.value()),
-            None,
-        ) {
-            Ok(avro_value) => {
-                // Convert Avro Value to JSON
-                // apache_avro::types::Value implements Serialize, so we can wrap it in Json
-                // But wait, axum::Json requires Serialize.
-                // Let's check if we can return Json(avro_value).
-                // Or maybe we want to convert to Customer struct first?
-                // "convert it to json" - converting to Customer first is safer if we want to ensure it matches our model.
-                // But converting directly to JSON is also fine if we just want to expose what's there.
-                // However, `apache_avro::types::Value` does not strictly implement `serde::Serialize` in a way that maps 1:1 to JSON always (e.g. unions).
-                // But `apache_avro::from_value::<Customer>(&avro_value)` is checking against our struct.
-                // Let's stick to the same logic as the consumer: convert to Customer.
+    if let Some(payload_entry) = state.dynamic_cache.get(&account_id) {
+        let payload_bytes = payload_entry.value();
 
-                match apache_avro::from_value::<Customer>(&avro_value) {
-                    Ok(customer) => {
-                        // Headers
-                        let mut headers = HeaderMap::new();
-                        let max_age = state.config.kafka.cache_max_age;
-                        headers.insert(
-                            "Cache-Control",
-                            format!("public, max-age={}", max_age.as_secs())
-                                .parse()
-                                .unwrap(),
-                        );
-                        headers.insert(
-                            "ETag",
-                            format!("\"{}\"", customer.updatedAt).parse().unwrap(),
-                        );
-                        return Ok((headers, Json(customer)));
+        let bytes_result = get_bytes_result(Some(payload_bytes));
+
+        if let Valid(msg_id, data) = bytes_result {
+            // Get schema
+            let schema = if let Some(s) = state.schema_cache.get(&msg_id) {
+                s.value().clone()
+            } else {
+                // Fetch if missing
+                let registry_url = &state.config.kafka.schema_registry_url;
+                match crate::kafka_utils::fetch_schema_by_id(registry_url.as_str(), msg_id).await {
+                    Ok(s) => {
+                        state.schema_cache.insert(msg_id, s.clone());
+                        s
                     }
                     Err(e) => {
                         return Err(MyError::Message(format!(
-                            "Failed to convert Avro to Customer: {}",
-                            e
+                            "Failed to fetch schema {}: {}",
+                            msg_id, e
                         )));
                     }
                 }
+            };
+
+            match from_avro_datum(&schema, &mut Cursor::new(data), None) {
+                Ok(avro_value) => {
+                    match apache_avro::from_value::<serde_json::Value>(&avro_value) {
+                        Ok(json_value) => {
+                            // Headers
+                            let mut headers = HeaderMap::new();
+                            let max_age = state.config.kafka.cache_max_age;
+                            headers.insert(
+                                "Cache-Control",
+                                format!("public, max-age={}", max_age.as_secs())
+                                    .parse()
+                                    .unwrap(),
+                            );
+                            return Ok((headers, Json(json_value)));
+                        }
+                        Err(e) => {
+                            return Err(MyError::Message(format!(
+                                "Failed to convert Avro to JSON: {}",
+                                e
+                            )));
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(MyError::Message(format!(
+                        "Failed to deserialize Avro datum: {}",
+                        e
+                    )));
+                }
             }
-            Err(e) => {
-                return Err(MyError::Message(format!(
-                    "Failed to deserialize Avro datum: {}",
-                    e
-                )));
-            }
+        } else {
+            return Err(MyError::Message("Invalid Avro message format".to_string()));
         }
     }
 
@@ -729,9 +738,18 @@ mod tests {
 
         // Serialize to Avro
         let schema = Customer::get_schema();
-        let encoded = to_avro_datum(&schema, to_value(&customer).unwrap()).unwrap();
+        let body = to_avro_datum(&schema, to_value(&customer).unwrap()).unwrap();
+
+        // Construct Confluent Wire Format: Magic Byte (0) + Schema ID (u32 big endian) + Body
+        let schema_id = 999u32;
+        let mut encoded = vec![0u8];
+        encoded.extend_from_slice(&schema_id.to_be_bytes());
+        encoded.extend(body);
 
         state.dynamic_cache.insert("dyn_user".to_string(), encoded);
+
+        // Pre-populate schema cache to avoid network call
+        state.schema_cache.insert(schema_id, schema);
 
         // We need to use the full path including prefix_dynamic which is "/dynamic"
         // But in `get_test_state`, we set `prefix_dynamic: "/dynamic"`.

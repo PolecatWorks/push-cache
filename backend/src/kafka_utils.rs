@@ -173,13 +173,24 @@ pub async fn fetch_schema_by_id(registry_url: &str, id: u32) -> Result<Schema, M
     match schema_result.schema_type {
         SchemaType::Avro => {
             let schema = Schema::parse_str(&schema_result.schema).map_err(|e| {
+                error!("Failed to parse schema {}: {}", id, e);
                 MyError::Message(format!("Failed to parse fetched schema {id}: {e}"))
             })?;
+            info!(
+                "Successfully fetched and parsed schema ID {} from Schema Registry",
+                id
+            );
             Ok(schema)
         }
-        _ => Err(MyError::Message(format!(
-            "Schema {id} is not Avro",
-            id = id
-        ))),
+        _ => {
+            error!(
+                "Schema {} is not Avro type: {:?}",
+                id, schema_result.schema_type
+            );
+            Err(MyError::Message(format!(
+                "Schema {id} is not Avro",
+                id = id
+            )))
+        }
     }
 }

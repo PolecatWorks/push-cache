@@ -162,13 +162,25 @@ pub async fn service_cancellable(ct: CancellationToken, config: &MyConfig) -> Re
     config.name = NAME.to_owned();
     config.version = VERSION.to_owned();
 
-    config.version = VERSION.to_owned();
+    let ct_clone = ct.clone();
 
-    let hams = Hams::new(ct.clone(), &config).unwrap();
+    // Wrapper to allow sending Hams across threads resulting from spawn_blocking
+    // This is necessary because Hams potentially contains raw pointers which are !Send
+    struct SendHams(Hams);
+    unsafe impl Send for SendHams {}
 
-    let lag_probe = ProbeManual::new("lag-cleared", false).unwrap();
-    hams.ready_insert(lag_probe.clone())?;
-    hams.startup_insert(lag_probe.clone())?;
+    let (hams_wrapper, lag_probe) = tokio::task::spawn_blocking(move || {
+        let hams = Hams::new(ct_clone, &config).unwrap();
+
+        let lag_probe = ProbeManual::new("lag-cleared", false).unwrap();
+        hams.ready_insert(lag_probe.clone())?;
+        hams.startup_insert(lag_probe.clone())?;
+        Ok::<_, MyError>((SendHams(hams), lag_probe))
+    })
+    .await
+    .map_err(|e| MyError::Message(format!("Tokio join error: {}", e)))??;
+
+    let hams = hams_wrapper.0;
 
     unsafe {
         hams.register_prometheus(

@@ -37,20 +37,14 @@ COPY . .
 RUN cargo build --release
 
 # We do not need the Rust toolchain to run the binary!
-FROM debian:trixie-slim AS runtime
+FROM gcr.io/distroless/cc-debian13 AS runtime
 # https://github.com/GoogleContainerTools/distroless
 # FROM gcr.io/distroless/cc-debian12 as runtime
-WORKDIR /app
-RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends openssl ca-certificates \
-    # Clean up
-    && apt-get autoremove -y \
-    && apt-get clean -y \
-    && rm -rf /var/lib/apt/lists/*
 COPY --from=sofile /usr/local/lib/libhams.so /usr/local/lib/
-RUN ldconfig
+ENV LD_LIBRARY_PATH=/usr/local/lib
 COPY --from=build /app/target/release/push-cache /usr/local/bin/
 
+USER nonroot:nonroot
 # COPY entrypoint.sh /
 ENTRYPOINT ["/usr/local/bin/push-cache"]
 # CMD ["-l", "sample01", "start"]

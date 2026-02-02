@@ -255,8 +255,7 @@ async fn get_dynamic_user(
                     }
                     Err(e) => {
                         return Err(MyError::Message(format!(
-                            "Failed to fetch schema {}: {}",
-                            msg_id, e
+                            "Failed to fetch schema {msg_id}: {e}"
                         )));
                     }
                 }
@@ -279,16 +278,14 @@ async fn get_dynamic_user(
                         }
                         Err(e) => {
                             return Err(MyError::Message(format!(
-                                "Failed to convert Avro to JSON: {}",
-                                e
+                                "Failed to convert Avro to JSON: {e}"
                             )));
                         }
                     }
                 }
                 Err(e) => {
                     return Err(MyError::Message(format!(
-                        "Failed to deserialize Avro datum: {}",
-                        e
+                        "Failed to deserialize Avro datum: {e}"
                     )));
                 }
             }
@@ -574,7 +571,7 @@ mod tests {
     async fn test_list_users_pagination() {
         let state = get_test_state().await;
         for i in 0..5 {
-            let id = format!("user{}", i);
+            let id = format!("user{i}");
             state.cache.insert(
                 id.clone(),
                 Customer {

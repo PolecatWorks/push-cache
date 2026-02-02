@@ -1,8 +1,7 @@
 use apache_avro::{AvroSchema, Schema, schema::RecordSchema};
 use rdkafka::{
-    ClientConfig,
+    ClientConfig, Offset, TopicPartitionList,
     consumer::{BaseConsumer, CommitMode, Consumer},
-    Offset, TopicPartitionList,
 };
 use schema_registry_converter::{
     async_impl::schema_registry::{SrSettings, post_schema},
@@ -13,6 +12,21 @@ use url::Url;
 
 use crate::{config::MyKafkaConfig, error::MyError};
 
+/// Constructs a Kafka broker connection string from the configuration.
+///
+/// # Arguments
+///
+/// * `config` - The Kafka configuration containing broker URL details.
+///
+/// # Returns
+///
+/// A connection string in the format "host:port".
+///
+/// # Errors
+///
+/// Returns `MyError` if:
+/// * The broker URL does not contain a valid host.
+/// * The broker URL does not contain a valid port.
 pub fn get_broker_string(config: &MyKafkaConfig) -> Result<String, MyError> {
     let host = config.brokers.host_str().ok_or_else(|| {
         MyError::Message(format!("Kafka broker host not defined {}", config.brokers))
@@ -69,6 +83,30 @@ pub async fn check_schema_registry(url: &Url, schema_type: &str) -> Result<(), M
     Ok(())
 }
 
+/// Resets consumer group offsets to the earliest available offset for all partitions.
+///
+/// This function forces the consumer group to start reading from the beginning of the topic
+/// by setting the committed offset for each partition to the earliest available offset (low watermark).
+///
+/// # Arguments
+///
+/// * `config` - The Kafka configuration containing broker, topic, and consumer group details.
+///
+/// # Returns
+///
+/// `Ok(())` if the offsets were successfully reset.
+///
+/// # Errors
+///
+/// Returns `MyError` if:
+/// * The broker connection string cannot be constructed.
+/// * The consumer cannot be created.
+/// * Metadata for the topic cannot be fetched.
+/// * The specified topic does not exist.
+/// * The topic has metadata errors.
+/// * The topic has no partitions.
+/// * Watermarks cannot be fetched for any partition.
+/// * The offset commit operation fails.
 pub async fn reset_consumer_offsets(config: &MyKafkaConfig) -> Result<(), MyError> {
     info!(
         "Forcing consumer group offsets to earliest for topic: {}",
@@ -111,19 +149,14 @@ pub async fn reset_consumer_offsets(config: &MyKafkaConfig) -> Result<(), MyErro
     }
 
     // Log current offsets
-    match consumer.committed_offsets(tpl.clone(), config.fetch_metadata_timeout) {
-        Ok(offsets) => {
-            for elem in offsets.elements() {
-                info!(
-                    "Current committed offset for partition {}: {:?}",
-                    elem.partition(),
-                    elem.offset()
-                );
-            }
-        }
-        Err(e) => {
-            warn!("Failed to fetch committed offsets: {}", e);
-        }
+
+    let offsets = consumer.committed_offsets(tpl.clone(), config.fetch_metadata_timeout)?;
+    for element in offsets.elements() {
+        info!(
+            "Current committed offset for partition {}: {:?}",
+            element.partition(),
+            element.offset()
+        );
     }
 
     for p in partitions {
@@ -185,6 +218,32 @@ pub async fn check_kafka_metadata(config: &MyKafkaConfig) -> Result<(), MyError>
     Ok(())
 }
 
+/// Registers an Avro schema with the Schema Registry and retrieves its schema ID.
+///
+/// This function takes a type implementing `AvroSchema`, extracts its schema definition,
+/// and registers it with the Schema Registry using the topic-record naming pattern.
+///
+/// # Type Parameters
+///
+/// * `T` - A type that implements `AvroSchema` trait.
+///
+/// # Arguments
+///
+/// * `registry` - The URL of the Schema Registry.
+/// * `topic` - The Kafka topic name used to construct the schema subject.
+///
+/// # Returns
+///
+/// A tuple containing:
+/// * `u32` - The schema ID assigned by the Schema Registry.
+/// * `Schema` - The Avro schema object.
+///
+/// # Errors
+///
+/// Returns `MyError` if:
+/// * The schema is not a Record schema.
+/// * The schema registration with the Schema Registry fails.
+/// * Network communication with the Schema Registry fails.
 pub async fn get_schema_id<T: AvroSchema>(
     registry: &str,
     topic: &str,

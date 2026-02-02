@@ -153,44 +153,57 @@ pub async fn get_schema_id<T: AvroSchema>(
 }
 
 pub async fn fetch_schema_by_id(registry_url: &str, id: u32) -> Result<Schema, MyError> {
-    use schema_registry_converter::async_impl::schema_registry::get_schema_by_id;
-
     info!(
-        "Fetching ID {} from Schema Registry at {}",
+        "Fetching schema ID {} from Schema Registry at {}",
         id, registry_url
     );
-    let sr_settings = SrSettings::new(registry_url.to_owned());
 
-    let schema_result = get_schema_by_id(id, &sr_settings).await.map_err(|e| {
-        error!("Failed to fetch schema {id}: {e:?}");
-        MyError::Message(format!("Failed to fetch schema {id}: {e:?}"))
+    // Build the URL directly - Schema Registry API: GET /schemas/ids/{id}
+    let url = format!("{}schemas/ids/{}", registry_url, id);
+
+    // Make direct HTTP request
+    let client = reqwest::Client::new();
+    let response = client.get(&url).send().await.map_err(|e| {
+        error!("Failed to fetch schema {} from {}: {}", id, url, e);
+        MyError::Message(format!("Failed to fetch schema {}: {}", id, e))
     })?;
 
-    // schema_result.schema is String (Avro JSON), parse it to Schema
-    // The SuppliedSchema struct contains the schema as a String if it's Avro.
-    // Wait, get_schema_by_id returns SuppliedSchema.
-
-    match schema_result.schema_type {
-        SchemaType::Avro => {
-            let schema = Schema::parse_str(&schema_result.schema).map_err(|e| {
-                error!("Failed to parse schema {}: {}", id, e);
-                MyError::Message(format!("Failed to parse fetched schema {id}: {e}"))
-            })?;
-            info!(
-                "Successfully fetched and parsed schema ID {} from Schema Registry",
-                id
-            );
-            Ok(schema)
-        }
-        _ => {
-            error!(
-                "Schema {} is not Avro type: {:?}",
-                id, schema_result.schema_type
-            );
-            Err(MyError::Message(format!(
-                "Schema {id} is not Avro",
-                id = id
-            )))
-        }
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        error!(
+            "Schema Registry returned status {} for schema {}: {}",
+            status, id, body
+        );
+        return Err(MyError::Message(format!(
+            "Schema Registry returned status {} for schema {}: {}",
+            status, id, body
+        )));
     }
+
+    // Parse response JSON - Schema Registry returns {"schema": "..."}
+    #[derive(serde::Deserialize)]
+    struct SchemaResponse {
+        schema: String,
+    }
+
+    let schema_response: SchemaResponse = response.json().await.map_err(|e| {
+        error!(
+            "Failed to parse Schema Registry response for schema {}: {}",
+            id, e
+        );
+        MyError::Message(format!("Failed to parse schema response: {}", e))
+    })?;
+
+    // Parse the schema JSON string into an Avro Schema
+    let schema = Schema::parse_str(&schema_response.schema).map_err(|e| {
+        error!("Failed to parse Avro schema {}: {}", id, e);
+        MyError::Message(format!("Failed to parse fetched schema {}: {}", id, e))
+    })?;
+
+    info!(
+        "Successfully fetched and parsed schema ID {} from Schema Registry",
+        id
+    );
+    Ok(schema)
 }

@@ -159,6 +159,8 @@ pub async fn fetch_schema_by_id(registry_url: &str, id: u32) -> Result<Schema, M
     );
 
     // Build the URL directly - Schema Registry API: GET /schemas/ids/{id}
+    // NOTE: We use direct HTTP instead of schema_registry_converter because
+    // the library has a bug parsing responses even in v4.7
     let url = format!("{}schemas/ids/{}", registry_url, id);
 
     // Make direct HTTP request

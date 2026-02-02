@@ -84,15 +84,35 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
                 .on_response(DefaultOnResponse::new().level(Level::DEBUG))
                 .on_failure(DefaultOnFailure::new().level(Level::ERROR)),
         )
-        .layer(metric_layer)
+        .layer(metric_layer.clone())
         .with_state(shared_state);
 
     let path = state.config.webservice.address.path();
     let dynamic_path = &state.config.webservice.path_dynamic;
 
     let dynamic_app = Router::new()
-        // ToDo: Add middleware and metrics to dynamic app
-        .route("/{account_id}", get(get_dynamic_user))
+        .route("/", post(create_user).get(list_users))
+        .route("/{account_id}", get(get_dynamic_user).delete(delete_user))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &axum::http::Request<_>| {
+                    let matched_path = request
+                        .extensions()
+                        .get::<MatchedPath>()
+                        .map(|matched_path| matched_path.as_str());
+
+                    tracing::debug_span!(
+                        "request",
+                        method = ?request.method(),
+                        uri = ?request.uri(),
+                        matched_path = ?matched_path,
+                    )
+                })
+                .on_request(DefaultOnRequest::new().level(Level::DEBUG))
+                .on_response(DefaultOnResponse::new().level(Level::DEBUG))
+                .on_failure(DefaultOnFailure::new().level(Level::ERROR)),
+        )
+        .layer(metric_layer)
         .with_state(state.clone());
 
     let prefix_app = Router::new()

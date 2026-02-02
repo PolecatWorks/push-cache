@@ -107,11 +107,11 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
                     let bytes_result = get_bytes_result(Some(payload));
 
                     if let Valid(msg_id, payload) = bytes_result {
-                        info!("Processing message with ID: {}", msg_id);
-                        info!(
-                            "Processing message with payload: {:?}",
-                            state.valid_schema_ids
-                        );
+                        // info!("Processing message with ID: {}", msg_id);
+                        // info!(
+                        //     "Processing message with payload: {:?}",
+                        //     state.valid_schema_ids
+                        // );
                         // Check if schema is in cache, if not fetch it
                         if !state.schema_cache.contains_key(&msg_id) {
                             // We need registry URL

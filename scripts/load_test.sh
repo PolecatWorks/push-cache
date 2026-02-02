@@ -76,6 +76,6 @@ fi
 echo "Running Load Test against /$USER_ID"
 echo "Concurrency: $CONCURRENCY, Duration: $DURATION"
 
-oha -c $CONCURRENCY -z $DURATION "http://localhost:8080/cache/$USER_ID"
+oha -c $CONCURRENCY -z $DURATION "http://localhost:8080/dynamic/$USER_ID"
 
 echo "Load Test Complete."

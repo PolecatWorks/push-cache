@@ -64,6 +64,7 @@
 //!   cache_max_age: 60s
 //!   fetch_metadata_timeout: 5s
 //!   offset_reset: earliest
+//!   force_reset_earliest: false
 //! startup_checks:
 //!   fails: 2
 //!   timeout: 5s
@@ -134,6 +135,8 @@ pub struct MyKafkaConfig {
     #[serde(with = "humantime_serde")]
     pub fetch_metadata_timeout: Duration,
     pub offset_reset: KafkaOffsetReset,
+    #[serde(default)]
+    pub force_reset_earliest: bool,
 }
 
 #[derive(Deserialize, Debug, Clone)]

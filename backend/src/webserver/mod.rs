@@ -380,6 +380,7 @@ mod tests {
             cache_max_age: std::time::Duration::from_secs(60),
             fetch_metadata_timeout: std::time::Duration::from_secs(5),
             offset_reset: crate::config::KafkaOffsetReset::Earliest,
+            force_reset_earliest: false,
         };
 
         let config = MyConfig {

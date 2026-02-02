@@ -1,7 +1,8 @@
 use apache_avro::{AvroSchema, Schema, schema::RecordSchema};
 use rdkafka::{
     ClientConfig,
-    consumer::{BaseConsumer, Consumer},
+    consumer::{BaseConsumer, CommitMode, Consumer},
+    Offset, TopicPartitionList,
 };
 use schema_registry_converter::{
     async_impl::schema_registry::{SrSettings, post_schema},
@@ -64,6 +65,81 @@ pub async fn check_schema_registry(url: &Url, schema_type: &str) -> Result<(), M
             "Schema type {schema_type} is not supported by the Schema Registry. Supported types: {schema_types:?}"
         )));
     }
+
+    Ok(())
+}
+
+pub async fn reset_consumer_offsets(config: &MyKafkaConfig) -> Result<(), MyError> {
+    info!(
+        "Forcing consumer group offsets to earliest for topic: {}",
+        config.topic
+    );
+
+    let consumer: BaseConsumer = ClientConfig::new()
+        .set("group.id", &config.group_id)
+        .set("bootstrap.servers", &get_broker_string(config)?)
+        .set("enable.auto.commit", "false")
+        .create()?;
+
+    // Fetch metadata to find partitions
+    let metadata = consumer.fetch_metadata(Some(&config.topic), config.fetch_metadata_timeout)?;
+
+    let topic_metadata = metadata
+        .topics()
+        .iter()
+        .find(|t| t.name() == config.topic)
+        .ok_or_else(|| MyError::Message(format!("Topic {} not found", config.topic)))?;
+
+    if let Some(err) = topic_metadata.error() {
+        return Err(MyError::Message(format!(
+            "Metadata error for topic {}: {:?}",
+            config.topic, err
+        )));
+    }
+
+    let partitions = topic_metadata.partitions();
+    if partitions.is_empty() {
+        return Err(MyError::Message(format!(
+            "Topic {} has no partitions",
+            config.topic
+        )));
+    }
+
+    let mut tpl = TopicPartitionList::new();
+    for p in partitions {
+        tpl.add_partition(&config.topic, p.id());
+    }
+
+    // Log current offsets
+    match consumer.committed_offsets(tpl.clone(), config.fetch_metadata_timeout) {
+        Ok(offsets) => {
+            for elem in offsets.elements() {
+                info!(
+                    "Current committed offset for partition {}: {:?}",
+                    elem.partition(),
+                    elem.offset()
+                );
+            }
+        }
+        Err(e) => {
+            warn!("Failed to fetch committed offsets: {}", e);
+        }
+    }
+
+    for p in partitions {
+        let partition_id = p.id();
+        // Fetch watermarks (low, high). Low is earliest available offset.
+        let (low, _high) = consumer.fetch_watermarks(
+            &config.topic,
+            partition_id,
+            config.fetch_metadata_timeout,
+        )?;
+        info!("Partition {}: resetting to offset {}", partition_id, low);
+        tpl.set_partition_offset(&config.topic, partition_id, Offset::Offset(low))?;
+    }
+
+    consumer.commit(&tpl, CommitMode::Sync)?;
+    info!("Successfully reset consumer group offsets to earliest.");
 
     Ok(())
 }

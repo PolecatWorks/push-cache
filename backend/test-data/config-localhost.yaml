@@ -25,6 +25,7 @@ kafka:
   cache_max_age: 300s
   fetch_metadata_timeout: 5s
   offset_reset: earliest
+  force_reset_earliest: true
 startup_checks:
   fails: 2
   timeout: 5s

@@ -52,4 +52,10 @@ pub enum MyError {
 
     #[error("Kafka error `{0}`")]
     KafkaError(#[from] rdkafka::error::KafkaError),
+
+    #[error("Avro error `{0}`")]
+    AvroError(#[from] apache_avro::Error),
+
+    #[error("Invalid header value")]
+    InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
 }

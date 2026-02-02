@@ -45,7 +45,7 @@ dashmap = "^6.0"
 apache-avro = { version = "^0.21", features = ["derive"] }
 hamsrs = { git = "https://github.com/PolecatWorks/hams.git" }
 ffi-log2 = { git = "https://github.com/PolecatWorks/hams.git" }
-schema_registry_converter = { version = "4.0.0", features = ["avro", "json", "blocking"] }
+schema_registry_converter = { version = "^4.7", features = ["avro", "json", "blocking"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }

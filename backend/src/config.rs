@@ -135,7 +135,6 @@ pub struct MyKafkaConfig {
     #[serde(with = "humantime_serde")]
     pub fetch_metadata_timeout: Duration,
     pub offset_reset: KafkaOffsetReset,
-    #[serde(default)]
     pub force_reset_earliest: bool,
 }
 

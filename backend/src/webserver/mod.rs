@@ -256,66 +256,42 @@ async fn get_dynamic_user(
     use schema_registry_converter::schema_registry_common::get_bytes_result;
     use std::io::Cursor;
 
-    if let Some(payload_entry) = state.dynamic_cache.get(&account_id) {
-        let payload_bytes = payload_entry.value();
+    // Get payload from cache
+    let payload_entry = state.dynamic_cache.get(&account_id).ok_or_else(|| {
+        state.requests_miss.inc();
+        MyError::NotFound("User not found in dynamic cache".into())
+    })?;
 
-        let bytes_result = get_bytes_result(Some(payload_bytes));
+    let payload_bytes = payload_entry.value();
+    let bytes_result = get_bytes_result(Some(payload_bytes));
 
-        if let Valid(msg_id, data) = bytes_result {
-            // Get schema
-            let schema = if let Some(s) = state.schema_cache.get(&msg_id) {
-                s.value().clone()
-            } else {
-                // Fetch if missing
-                let registry_url = &state.config.kafka.schema_registry_url;
-                match crate::kafka_utils::fetch_schema_by_id(registry_url.as_str(), msg_id).await {
-                    Ok(s) => {
-                        state.schema_cache.insert(msg_id, s.clone());
-                        s
-                    }
-                    Err(e) => {
-                        return Err(MyError::Message(format!(
-                            "Failed to fetch schema {msg_id}: {e}"
-                        )));
-                    }
-                }
-            };
+    // Extract schema ID and data from Confluent Wire Format
+    let (msg_id, data) = match bytes_result {
+        Valid(id, data) => (id, data),
+        _ => return Err(MyError::Message("Invalid Avro message format".to_string())),
+    };
 
-            match from_avro_datum(&schema, &mut Cursor::new(data), None) {
-                Ok(avro_value) => {
-                    match apache_avro::from_value::<serde_json::Value>(&avro_value) {
-                        Ok(json_value) => {
-                            // Headers
-                            let mut headers = HeaderMap::new();
-                            let max_age = state.config.kafka.cache_max_age;
-                            headers.insert(
-                                "Cache-Control",
-                                format!("public, max-age={}", max_age.as_secs())
-                                    .parse()
-                                    .unwrap(),
-                            );
-                            return Ok((headers, Json(json_value)));
-                        }
-                        Err(e) => {
-                            return Err(MyError::Message(format!(
-                                "Failed to convert Avro to JSON: {e}"
-                            )));
-                        }
-                    }
-                }
-                Err(e) => {
-                    return Err(MyError::Message(format!(
-                        "Failed to deserialize Avro datum: {e}"
-                    )));
-                }
-            }
-        } else {
-            return Err(MyError::Message("Invalid Avro message format".to_string()));
-        }
-    }
+    // Get schema from cache or error if it does not exist (should never happen as schemas are cached on population)
+    let schema = state
+        .schema_cache
+        .get(&msg_id)
+        .ok_or_else(|| MyError::NotFound("Schema not found in cache".into()))?;
 
-    state.requests_miss.inc();
-    Err(MyError::NotFound("User not found in dynamic cache".into()))
+    // Deserialize Avro to generic value
+    let avro_value = from_avro_datum(&schema, &mut Cursor::new(data), None)?;
+
+    // Convert to JSON
+    let json_value = apache_avro::from_value::<serde_json::Value>(&avro_value)?;
+
+    // Build response with cache headers
+    let mut headers = HeaderMap::new();
+    let max_age = state.config.kafka.cache_max_age;
+    headers.insert(
+        "Cache-Control",
+        format!("public, max-age={}", max_age.as_secs()).parse()?,
+    );
+
+    Ok((headers, Json(json_value)))
 }
 
 impl IntoResponse for MyError {
@@ -362,6 +338,14 @@ impl IntoResponse for MyError {
             MyError::KafkaError(_error) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Kafka Error".to_string())
             }
+            MyError::AvroError(_error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Avro Deserialization Error".to_string(),
+            ),
+            MyError::InvalidHeaderValue(_error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Invalid Header Value".to_string(),
+            ),
         };
 
         // Use a public constructor or helper function for ErrorResponse.

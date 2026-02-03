@@ -61,9 +61,11 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
     let path = state.config.webservice.address.path();
 
     let dynamic_app = Router::new()
-        // .route("/", post(create_record).get(list_records))
         .route("/", get(list_records))
-        .route("/{account_id}", get(get_record).delete(delete_record))
+        .route(
+            "/{account_id}",
+            get(get_record).delete(delete_record).post(create_record),
+        )
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &axum::http::Request<_>| {
@@ -107,30 +109,37 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
     Ok(server.await?)
 }
 
-// /// Handler for POST /users
-// /// Creates a new customer.
-// /// Returns 201 Created on success, or 409 Conflict if the user already exists.
-// async fn create_record(
-//     State(state): State<MyState>,
-//     Json(customer): Json<Customer>,
-// ) -> Result<impl IntoResponse, MyError> {
-//     use dashmap::mapref::entry::Entry;
+use axum::body::Bytes;
 
-//     match state.cache.entry(customer.accountId.clone()) {
-//         Entry::Occupied(_) => Ok((
-//             StatusCode::CONFLICT,
-//             Json(serde_json::json!({ "message": "User already exists" })),
-//         )),
-//         Entry::Vacant(entry) => {
-//             entry.insert(customer.clone());
-//             state.cache_size.inc();
-//             Ok((
-//                 StatusCode::CREATED,
-//                 Json(serde_json::to_value(customer).unwrap()),
-//             ))
-//         }
-//     }
-// }
+/// Handler for POST /:id
+/// Creates a new record from raw Avro bytes with a client-supplied key.
+/// input: Raw bytes containing Confluent Wire Format (Magic Byte + Schema ID + Data)
+/// Returns 201 Created with the key.
+async fn create_record(
+    State(state): State<MyState>,
+    Path(key): Path<String>,
+    body: Bytes,
+) -> Result<impl IntoResponse, MyError> {
+    // Validate Confluent Wire Format
+    if body.len() < 5 {
+        return Err(MyError::Message("Payload too short".to_string()));
+    }
+
+    if body[0] != 0 {
+        return Err(MyError::Message("Invalid Magic Byte".to_string()));
+    }
+
+    let schema_id_bytes: [u8; 4] = body[1..5].try_into().unwrap();
+    let schema_id = u32::from_be_bytes(schema_id_bytes);
+
+    info!("Received record with Schema ID: {}", schema_id);
+
+    // Store in Cache using provided key
+    state.cache.insert(key.clone(), body.to_vec());
+    state.cache_size.inc();
+
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": key }))))
+}
 
 /// Handler for DELETE /users/{account_id}
 /// Deletes a customer by their Account ID.
@@ -370,26 +379,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_user_success() {
-        // NOTE: create_record/create_user is currently commented out in the implementation.
-        // Assuming we are adapting tests for when it IS enabled or replaced.
-        // If it's commented out, we might want to comment out this test or adapt it.
-        // However, based on user request, they "removed the Customer only get function".
-        // The create function is also commented out in the provided code snippet.
-        // We will comment this test out to match the source code state or update it if the user wants it fixed "in case".
-
-        // Since the previous code had it enabled in tests, I will update it to be correct
-        // BUT assume the handler exists. If the handler is commented out in main code,
-        // this test won't compile unless I also comment it out.
-        // Looking at the provided file content, `create_record` is COMMENTED OUT.
-        // So I should probably remove/comment out these create tests or fix them anticipating re-enablement.
-        // I will comment them out for now to ensure `cargo check` passes.
-
-        /*
+    async fn test_create_record_success() {
         let state = get_test_state().await;
 
         let app = Router::new()
-            .route("/", post(create_record))
+            .route("/{account_id}", post(create_record))
             .with_state(state.clone());
 
         let customer = Customer {
@@ -400,16 +394,31 @@ mod tests {
             createdAt: 100,
             updatedAt: 200,
         };
-        // ...
-        */
-    }
+        let body_bytes = serialize_customer(&customer);
+        let custom_key = "custom-key-123";
 
-    /*
-    #[tokio::test]
-    async fn test_create_user_conflict() {
-       // ... commented out as handler is gone
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(&format!("/{}", custom_key))
+                    .body(Body::from(body_bytes))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let resp_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let resp_json: serde_json::Value = serde_json::from_slice(&resp_bytes).unwrap();
+        let id_str = resp_json["id"].as_str().unwrap();
+
+        assert_eq!(id_str, custom_key);
+        assert!(state.cache.contains_key(custom_key));
     }
-    */
 
     #[tokio::test]
     async fn test_delete_user_success() {

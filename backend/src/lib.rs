@@ -42,8 +42,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Debug, Clone)]
 pub struct MyState {
     config: MyConfig,
-    pub cache: Arc<DashMap<String, Customer>>,
-    pub dynamic_cache: Arc<DashMap<String, Vec<u8>>>,
+    pub cache: Arc<DashMap<String, Vec<u8>>>,
     pub schema_cache: Arc<DashMap<u32, Schema>>,
     // Metrics
     pub requests_total: Box<IntCounter>,
@@ -53,7 +52,6 @@ pub struct MyState {
     pub schema_mismatch_count: Box<IntCounter>,
     pub cache_size: Box<IntGauge>,
     pub consumer_lag: Box<IntGauge>,
-    pub valid_schema_ids: Vec<u32>,
     pub startup_lag_cleared: Arc<AtomicBool>,
 
     registry: Registry,
@@ -133,8 +131,10 @@ impl MyState {
         Ok(MyState {
             config: config.clone(),
             cache: Arc::new(DashMap::new()),
-            dynamic_cache: Arc::new(DashMap::new()),
             schema_cache: Arc::new(DashMap::new()),
+
+            startup_lag_cleared: Arc::new(AtomicBool::new(false)),
+
             requests_total: Box::new(requests_total),
             requests_miss: Box::new(requests_miss),
             updates_received: Box::new(updates_received),
@@ -142,8 +142,6 @@ impl MyState {
             schema_mismatch_count: Box::new(schema_mismatch_count),
             cache_size: Box::new(cache_size),
             consumer_lag: Box::new(consumer_lag),
-            valid_schema_ids: valid_schema_ids_vec,
-            startup_lag_cleared: Arc::new(AtomicBool::new(false)),
 
             registry,
             prometheus_handle: Arc::new(metric_handle),

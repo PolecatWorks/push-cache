@@ -7,6 +7,7 @@ SECRETS_DIR="backend/test-data/secrets" # Assuming secrets might be here or not 
 RECORD_COUNT=1000
 DURATION="30s"
 CONCURRENCY=100
+MESSAGE_TYPE="${MESSAGE_TYPE:-customer}"
 
 # 0. Ensure local cargo bin is in PATH
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -29,13 +30,28 @@ fi
 # pkill -f "target/release/push-cache" || true
 
 # 3. Populate Kafka
-echo "Populating Kafka with $RECORD_COUNT records..."
+# 3. Populate Kafka
+echo "Populating Kafka with $RECORD_COUNT records of type '$MESSAGE_TYPE'..."
 # Create a dummy secrets dir if missing to satisfy the arg
 mkdir -p "$SECRETS_DIR"
-RUST_LOG=warn cargo run --manifest-path backend/Cargo.toml --release --example populate_kafka -- \
+POPULATE_OUTPUT=$(RUST_LOG=warn cargo run --manifest-path backend/Cargo.toml --release --example populate_kafka -- \
     --count $RECORD_COUNT \
     --config "$CONFIG_FILE" \
-    --secrets "$SECRETS_DIR"
+    --secrets "$SECRETS_DIR" \
+    --message-type "$MESSAGE_TYPE")
+
+# Print output for visibility (logs go to stderr automatically, this prints stdout including our key)
+echo "$POPULATE_OUTPUT"
+
+# Extract Key
+GENERATED_KEY=$(echo "$POPULATE_OUTPUT" | grep "Serialized Key:" | head -n 1 | awk '{print $3}')
+
+if [ -z "$GENERATED_KEY" ]; then
+    echo "Failed to capture generated key. Population might have failed."
+    exit 1
+fi
+
+echo "Captured Key: $GENERATED_KEY"
 
 # # 4. Start Backend
 # echo "Starting Backend..."
@@ -62,20 +78,10 @@ done
 echo "Server is UP!"
 
 # 6. Run Load Test
-# We need a valid account ID. Since populate generates random IDs, we can't easily guess one.
-# But `populate_kafka` prints "Produced AccountID: <id>". We didn't capture it.
-# Alternative: Query /api/users (list) to get an ID.
-echo "Fetching a valid user ID..."
-USER_ID=$(curl -s "http://localhost:8080/cache?limit=1" | grep -o '"[^"]*"' | head -n 1 | tr -d '"')
-
-if [ -z "$USER_ID" ]; then
-    echo "Could not find any users in cache. Did population fail?"
-    exit 1
-fi
-
-echo "Running Load Test against /$USER_ID"
+echo "Running Load Test against /dynamic/$GENERATED_KEY"
 echo "Concurrency: $CONCURRENCY, Duration: $DURATION"
 
-oha -c $CONCURRENCY -z $DURATION "http://localhost:8080/dynamic/$USER_ID"
+# Use the dynamic endpoint which supports all message types
+oha -c $CONCURRENCY -z $DURATION "http://localhost:8080/dynamic/$GENERATED_KEY"
 
 echo "Load Test Complete."

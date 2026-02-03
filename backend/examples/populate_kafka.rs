@@ -1,5 +1,5 @@
 use apache_avro::AvroSchema;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use fake::Fake;
 use push_cache::config::MyConfig;
 use push_cache::model::Customer;
@@ -15,24 +15,33 @@ use tracing_subscriber::EnvFilter;
 #[command(version, about, long_about = None)]
 struct Cli {
     /// Number of records to produce
-    #[arg(short, long, default_value_t = 100)]
+    #[arg(short = 'n', long, default_value_t = 100)]
     count: usize,
 
     /// Config file
-    #[arg(short, long, value_name = "FILE")]
+    #[arg(short = 'c', long, value_name = "FILE")]
     config: PathBuf,
 
     /// Secrets dir
     #[arg(short, long, value_name = "DIR", default_value = "secrets")]
     secrets: PathBuf,
 
-    /// Message type to produce (customer, bill, usage, ticket)
-    #[arg(short, long, default_value = "customer")]
-    message_type: String,
+    /// Message type to produce
+    #[arg(short, long, value_enum, default_value_t = MessageType::Customer, env = "MESSAGE_TYPE")]
+    message_type: MessageType,
 
     /// Kafka Topic (overrides config)
-    #[arg(short, long)]
+    #[arg(short, long, env = "KAFKA_TOPIC")]
     topic: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+#[value(rename_all = "lowercase")]
+enum MessageType {
+    Customer,
+    Bill,
+    Usage,
+    Ticket,
 }
 
 /// Represents a payment transaction.
@@ -115,27 +124,23 @@ async fn main() {
     let topic = args.topic.as_deref().unwrap_or(&config.kafka.topic);
 
     info!(
-        "Producing {} records of type '{}' to topic {}",
+        "Producing {} records of type '{:?}' to topic {}",
         args.count, args.message_type, topic
     );
 
-    let result = match args.message_type.as_str() {
-        "customer" => {
+    let result = match args.message_type {
+        MessageType::Customer => {
             produce_records::<Customer, _>(&config, topic, args.count, manual_fake_customer).await
         }
-        "bill" => {
+        MessageType::Bill => {
             produce_records::<CustomerBill, _>(&config, topic, args.count, manual_fake_bill).await
         }
-        "usage" => {
+        MessageType::Usage => {
             produce_records::<UsageRecord, _>(&config, topic, args.count, manual_fake_usage).await
         }
-        "ticket" => {
+        MessageType::Ticket => {
             produce_records::<SupportTicket, _>(&config, topic, args.count, manual_fake_ticket)
                 .await
-        }
-        _ => {
-            error!("Unknown message type: {}", args.message_type);
-            return;
         }
     };
 
@@ -256,6 +261,10 @@ where
                 Duration::from_secs(0),
             )
             .await;
+
+        if i == 0 {
+            println!("Serialized Key: {}", key);
+        }
 
         if (i + 1) % 100 == 0 {
             debug!("Produced {}/{}", i + 1, count);

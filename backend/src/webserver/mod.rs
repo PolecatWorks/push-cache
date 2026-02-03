@@ -14,7 +14,6 @@ use reqwest::StatusCode;
 use tower_http::trace::{DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer};
 use tracing::{Level, info};
 
-use crate::model::Customer;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -294,7 +293,7 @@ mod tests {
     use super::*;
     use crate::MyState;
     use crate::config::{MyConfig, MyKafkaConfig};
-    use crate::model::Customer;
+
     use axum::routing::delete;
     use axum::{
         Router,
@@ -306,6 +305,18 @@ mod tests {
     use tower::util::ServiceExt; // for oneshot
 
     use apache_avro::{AvroSchema, to_avro_datum, to_value};
+
+    #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone)]
+    #[avro(namespace = "com.polecatworks.billing")]
+    #[allow(non_snake_case)]
+    pub struct Customer {
+        pub accountId: String,
+        pub name: String,
+        pub address: String,
+        pub phone: String,
+        pub createdAt: i64,
+        pub updatedAt: i64,
+    }
 
     // Helper to serialize customer for tests
     fn serialize_customer(customer: &Customer) -> Vec<u8> {

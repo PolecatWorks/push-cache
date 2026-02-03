@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     ffi::c_void,
     sync::{Arc, atomic::AtomicBool},
 };
@@ -15,8 +14,7 @@ use prometheus::{IntCounter, IntGauge, Registry};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    config::MyConfig, error::MyError, kafka_utils::get_schema_id, model::Customer,
-    tokio_tools::run_in_tokio, webserver::start_app_api,
+    config::MyConfig, error::MyError, tokio_tools::run_in_tokio, webserver::start_app_api,
 };
 
 use metrics::{prometheus_response_free, prometheus_response_mystate};
@@ -29,7 +27,6 @@ pub mod error;
 pub mod hams;
 pub mod kafka_utils;
 mod metrics;
-pub mod model;
 mod startup_tools;
 pub mod tokio_tools;
 pub mod webserver;
@@ -99,33 +96,6 @@ impl MyState {
 
         if perform_checks {
             run_startup_checks(config).await?;
-        }
-
-        let mut valid_schema_ids = HashSet::new();
-
-        if perform_checks {
-            let schema_id = get_schema_id::<Customer>(
-                config
-                    .kafka
-                    .schema_registry_url
-                    .as_str()
-                    .trim_end_matches('/'), // trim trailing slash
-                &config.kafka.topic,
-            )
-            .await?;
-
-            valid_schema_ids.insert(schema_id.0);
-        } else {
-            // In test/no-check mode, assume a dummy schema ID if needed, or bypass check
-            valid_schema_ids.insert(0);
-        }
-
-        let valid_schema_ids_vec: Vec<u32> = valid_schema_ids.into_iter().collect();
-
-        if valid_schema_ids_vec.is_empty() {
-            return Err(MyError::Message(
-                "No valid schema IDs found. Cannot start consumer.".to_string(),
-            ));
         }
 
         Ok(MyState {

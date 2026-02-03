@@ -1,5 +1,4 @@
 use crate::kafka_utils::get_broker_string;
-use apache_avro::{AvroSchema, from_avro_datum};
 
 use futures::TryStreamExt;
 use rdkafka::Message;
@@ -9,13 +8,11 @@ use rdkafka::consumer::{Consumer, ConsumerContext, StreamConsumer};
 use rdkafka::statistics::Statistics;
 use schema_registry_converter::schema_registry_common::BytesResult::Valid;
 use schema_registry_converter::schema_registry_common::get_bytes_result;
-use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{error, info, warn};
 
 use crate::MyState;
 use crate::error::MyError;
-use crate::model::Customer;
 use hamsrs::probes::ProbeManual;
 
 // Context to handle statistics callbacks
@@ -106,7 +103,7 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
                 Some(payload) => {
                     let bytes_result = get_bytes_result(Some(payload));
 
-                    if let Valid(msg_id, payload) = bytes_result {
+                    if let Valid(msg_id, _payload) = bytes_result {
                         // info!("Processing message with ID: {}", msg_id);
                         // info!(
                         //     "Processing message with payload: {:?}",

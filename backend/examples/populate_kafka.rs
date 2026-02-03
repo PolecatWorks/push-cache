@@ -35,6 +35,10 @@ struct Cli {
     topic: Option<String>,
 }
 
+/// Represents a payment transaction.
+///
+/// This structure models a single payment made by a customer, including
+/// the payment date, amount, and payment method.
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone)]
 #[avro(namespace = "com.polecatworks.billing")]
 #[allow(non_snake_case)]
@@ -44,6 +48,10 @@ pub struct Payment {
     pub method: String,
 }
 
+/// Represents a customer billing statement.
+///
+/// This structure aggregates billing information for a customer account,
+/// including the total amount due and a list of payments made.
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone)]
 #[avro(namespace = "com.polecatworks.billing")]
 #[allow(non_snake_case)]
@@ -54,6 +62,11 @@ pub struct CustomerBill {
     pub payments: Vec<Payment>,
 }
 
+/// Represents a service usage record.
+///
+/// This structure tracks customer usage of a particular service,
+/// including the service type, amount consumed, unit of measurement,
+/// and timestamp of the usage.
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone)]
 #[avro(namespace = "com.polecatworks.billing")]
 #[allow(non_snake_case)]
@@ -65,6 +78,11 @@ pub struct UsageRecord {
     pub timestamp: i64,
 }
 
+/// Represents a customer support ticket.
+///
+/// This structure models a support ticket raised by a customer,
+/// including the ticket ID, associated account, issue description,
+/// current status, and creation timestamp.
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone)]
 #[avro(namespace = "com.polecatworks.billing")]
 #[allow(non_snake_case)]
@@ -126,6 +144,58 @@ async fn main() {
     }
 }
 
+/// Produces a specified number of Avro-encoded records to a Kafka topic.
+///
+/// This generic function handles the complete workflow of:
+/// 1. Creating a Kafka producer
+/// 2. Registering the schema with Schema Registry
+/// 3. Generating and encoding records using the provided generator function
+/// 4. Publishing records to Kafka with proper Avro framing (magic byte + schema ID)
+/// 5. Tracking and reporting statistics about the generated messages
+///
+/// # Type Parameters
+///
+/// * `T` - The message type to produce. Must implement `AvroSchema`, `Serialize`, `Clone`, and `Debug`.
+/// * `F` - A function that generates instances of type `T`.
+///
+/// # Arguments
+///
+/// * `config` - Application configuration containing Kafka broker and Schema Registry details.
+/// * `topic` - The Kafka topic name to publish messages to.
+/// * `count` - The number of records to generate and publish.
+/// * `generator` - A function that generates a single record of type `T`.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success, or an error if:
+/// - The Kafka producer cannot be created
+/// - Schema registration fails
+/// - Record encoding fails
+/// - Message publishing fails
+///
+/// # Statistics
+///
+/// After completion, logs the following statistics:
+/// - Total size of all Avro payloads (bytes)
+/// - Maximum record size (bytes)
+/// - Minimum record size (bytes)
+/// - Average record size (bytes)
+///
+/// # Examples
+///
+/// ```no_run
+/// use push_cache::model::Customer;
+/// use push_cache::config::MyConfig;
+///
+/// async fn example(config: &MyConfig) {
+///     produce_records::<Customer, _>(
+///         config,
+///         "my-topic",
+///         100,
+///         || generate_fake_customer()
+///     ).await.expect("Failed to produce records");
+/// }
+/// ```
 async fn produce_records<T, F>(
     config: &MyConfig,
     topic: &str,
@@ -182,9 +252,7 @@ where
 
         let _ = producer
             .send(
-                FutureRecord::to(topic)
-                    .payload(&payload)
-                    .key(&key),
+                FutureRecord::to(topic).payload(&payload).key(&key),
                 Duration::from_secs(0),
             )
             .await;
@@ -208,6 +276,25 @@ where
     Ok(())
 }
 
+/// Generates a fake `Customer` record using the `fake` crate.
+///
+/// Creates a realistic-looking customer with randomly generated:
+/// - Name
+/// - Address (street and city)
+/// - Phone number
+/// - Unique account ID (UUID)
+/// - Creation and update timestamps (current time)
+///
+/// # Returns
+///
+/// A `Customer` instance with randomly generated data.
+///
+/// # Examples
+///
+/// ```
+/// let customer = manual_fake_customer();
+/// println!("Generated customer: {}", customer.name);
+/// ```
 fn manual_fake_customer() -> Customer {
     use chrono::Utc;
     use fake::faker::address::en::{CityName, StreetName};
@@ -233,6 +320,26 @@ fn manual_fake_customer() -> Customer {
     }
 }
 
+/// Generates a fake `CustomerBill` record with multiple payments.
+///
+/// Creates a billing statement with:
+/// - Random number of payments (1-11)
+/// - Each payment has a random amount between $10 and $500
+/// - Total amount is the sum of all payments
+/// - Current date for payment timestamps
+/// - Random payment methods
+///
+/// # Returns
+///
+/// A `CustomerBill` instance with randomly generated payment data.
+///
+/// # Examples
+///
+/// ```
+/// let bill = manual_fake_bill();
+/// println!("Total amount: ${}", bill.totalAmount);
+/// println!("Number of payments: {}", bill.payments.len());
+/// ```
 fn manual_fake_bill() -> CustomerBill {
     use fake::faker::lorem::en::Word;
     // Generate payments
@@ -258,6 +365,25 @@ fn manual_fake_bill() -> CustomerBill {
     }
 }
 
+/// Generates a fake `UsageRecord` for service usage tracking.
+///
+/// Creates a usage record with:
+/// - Random account ID (UUID)
+/// - Random service type
+/// - Random usage amount between 1.0 and 100.0
+/// - Unit set to "GB"
+/// - Current timestamp
+///
+/// # Returns
+///
+/// A `UsageRecord` instance with randomly generated usage data.
+///
+/// # Examples
+///
+/// ```
+/// let usage = manual_fake_usage();
+/// println!("Service: {}, Amount: {} {}", usage.serviceType, usage.amount, usage.unit);
+/// ```
 fn manual_fake_usage() -> UsageRecord {
     use fake::faker::lorem::en::Word;
     UsageRecord {
@@ -269,6 +395,25 @@ fn manual_fake_usage() -> UsageRecord {
     }
 }
 
+/// Generates a fake `SupportTicket` for customer support tracking.
+///
+/// Creates a support ticket with:
+/// - Random ticket ID (UUID)
+/// - Random account ID (UUID)
+/// - Random issue description (5-10 word sentence)
+/// - Random status
+/// - Current timestamp
+///
+/// # Returns
+///
+/// A `SupportTicket` instance with randomly generated ticket data.
+///
+/// # Examples
+///
+/// ```
+/// let ticket = manual_fake_ticket();
+/// println!("Ticket {}: {}", ticket.ticketId, ticket.issue);
+/// ```
 fn manual_fake_ticket() -> SupportTicket {
     use fake::faker::lorem::en::{Sentence, Word};
     SupportTicket {

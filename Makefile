@@ -1,7 +1,8 @@
 .PHONY: backend-dev backend-test backend-app-auth frontend-dev \
 	start-zookeeper start-kafka start-schema \
 	topics-list topics-create topics-delete topic-describe \
-	groups-list groups-describe
+	groups-list groups-describe \
+	populate-help populate-customers populate-bills populate-usage populate-tickets
 
 BE_DIR := backend
 FE_DIR := frontend
@@ -108,3 +109,48 @@ topic-input-write:
 
 topic-input-read:
 	@$(KAFKA_CONSUMER) --bootstrap-server $(KAFKA_BOOTSTRAP) --topic input --from-beginning --property print.key=true --property key.separator=":"
+
+################################################################################
+# Kafka Data Population
+################################################################################
+
+populate-help:
+	@echo "Available populate targets:"
+	@echo "  populate-customers - Generate 100 customer records (default message type)"
+	@echo "  populate-bills     - Generate 100 billing records to pcache-users topic"
+	@echo "  populate-usage     - Generate 100 usage records to pcache-users topic"
+	@echo "  populate-tickets   - Generate 100 support ticket records to pcache-users topic"
+	@echo ""
+	@echo "Example: make populate-customers"
+	@echo "Note: Ensure Kafka, Zookeeper, and Schema Registry are running first"
+
+populate-customers:
+	cd ${BE_DIR} && cargo run --example populate_kafka -- \
+		--config test-data/config-localhost.yaml \
+		--secrets test-data/secrets \
+		--message-type customer \
+		--count 100
+
+populate-bills:
+	cd ${BE_DIR} && cargo run --example populate_kafka -- \
+		--config test-data/config-localhost.yaml \
+		--secrets test-data/secrets \
+		--message-type bill \
+		--topic pcache-users \
+		--count 100
+
+populate-usage:
+	cd ${BE_DIR} && cargo run --example populate_kafka -- \
+		--config test-data/config-localhost.yaml \
+		--secrets test-data/secrets \
+		--message-type usage \
+		--topic pcache-users \
+		--count 100
+
+populate-tickets:
+	cd ${BE_DIR} && cargo run --example populate_kafka -- \
+		--config test-data/config-localhost.yaml \
+		--secrets test-data/secrets \
+		--message-type ticket \
+		--topic pcache-users \
+		--count 100

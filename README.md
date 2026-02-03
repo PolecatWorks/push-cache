@@ -45,6 +45,49 @@ The core data entity is the `Customer`.
 | `createdAt` | i64    | Creation timestamp |
 | `updatedAt` | i64    | Last update timestamp |
 
+### Additional Message Types
+
+The system also supports these additional Avro message types for testing and development:
+
+#### CustomerBill
+Represents a customer billing statement.
+
+| Field         | Type           | Description |
+|---------------|----------------|-------------|
+| `accountId`   | String         | Associated account ID |
+| `year`        | i32            | Billing year |
+| `totalAmount` | f64            | Total amount due |
+| `payments`    | Vec\<Payment\> | List of payments made |
+
+#### Payment (nested in CustomerBill)
+| Field    | Type   | Description |
+|----------|--------|-------------|
+| `date`   | String | Payment date (RFC3339) |
+| `amount` | f64    | Payment amount |
+| `method` | String | Payment method |
+
+#### UsageRecord
+Tracks service usage by customers.
+
+| Field         | Type   | Description |
+|---------------|--------|-------------|
+| `accountId`   | String | Associated account ID |
+| `serviceType` | String | Type of service used |
+| `amount`      | f64    | Usage amount |
+| `unit`        | String | Unit of measurement (e.g., "GB") |
+| `timestamp`   | i64    | Usage timestamp (milliseconds) |
+
+#### SupportTicket
+Represents a customer support ticket.
+
+| Field       | Type   | Description |
+|-------------|--------|-------------|
+| `ticketId`  | String | Unique ticket identifier |
+| `accountId` | String | Associated account ID |
+| `issue`     | String | Issue description |
+| `status`    | String | Current ticket status |
+| `timestamp` | i64    | Creation timestamp (milliseconds) |
+
 ## API Reference
 
 ### Get Customer
@@ -113,6 +156,80 @@ kafka:
   topic: "users"
   schema_registry_url: "http://localhost:8081"
   cache_max_age_seconds: 60
+```
+
+## Data Population
+
+The repository includes a `populate_kafka` example tool for generating test data and publishing it to Kafka with proper Avro encoding.
+
+### Features
+- Supports multiple message types: `customer`, `bill`, `usage`, `ticket`
+- Dynamic schema registration with Schema Registry
+- Configurable topic and record count
+- Statistics reporting (min/max/avg message sizes)
+- Proper Avro encoding with magic byte and schema ID
+
+### Usage
+
+**Basic usage:**
+```bash
+cd backend
+cargo run --example populate_kafka -- \
+  --config test-data/config-localhost.yaml \
+  --secrets test-data/secrets \
+  --message-type customer \
+  --count 100
+```
+
+**Generate different message types:**
+
+```bash
+# Generate customer records (default)
+cargo run --example populate_kafka -- -c test-data/config-localhost.yaml -s test-data/secrets -m customer -n 100
+
+# Generate billing records
+cargo run --example populate_kafka -- -c test-data/config-localhost.yaml -s test-data/secrets -m bill -n 50
+
+# Generate usage records
+cargo run --example populate_kafka -- -c test-data/config-localhost.yaml -s test-data/secrets -m usage -n 200
+
+# Generate support tickets
+cargo run --example populate_kafka -- -c test-data/config-localhost.yaml -s test-data/secrets -m ticket -n 25
+```
+
+**Override topic:**
+```bash
+cargo run --example populate_kafka -- \
+  --config test-data/config-localhost.yaml \
+  --secrets test-data/secrets \
+  --message-type customer \
+  --topic custom-topic \
+  --count 100
+```
+
+### CLI Arguments
+
+| Argument | Short | Default | Description |
+|----------|-------|---------|-------------|
+| `--config` | `-c` | *Required* | Path to configuration YAML file |
+| `--secrets` | `-s` | `secrets` | Directory containing secret files |
+| `--message-type` | `-m` | `customer` | Message type: `customer`, `bill`, `usage`, or `ticket` |
+| `--topic` | `-t` | From config | Override Kafka topic name |
+| `--count` | `-n` | `100` | Number of records to generate |
+
+### Makefile Shortcuts
+
+For convenience, use the Makefile targets:
+
+```bash
+# Generate different types of test data
+make populate-customers
+make populate-bills
+make populate-usage
+make populate-tickets
+
+# See all available populate targets
+make populate-help
 ```
 
 ## Development

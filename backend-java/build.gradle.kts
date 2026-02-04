@@ -18,6 +18,7 @@ repositories {
 }
 
 dependencies {
+    implementation("org.apache.avro:avro:1.11.3")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.kafka:spring-kafka")

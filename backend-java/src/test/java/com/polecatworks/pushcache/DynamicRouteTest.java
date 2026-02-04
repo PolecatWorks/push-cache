@@ -1,15 +1,25 @@
 package com.polecatworks.pushcache;
 
 import com.polecatworks.pushcache.service.CacheStore;
+import com.polecatworks.pushcache.service.SchemaService;
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericDatumWriter;
+import org.apache.avro.io.BinaryEncoder;
+import org.apache.avro.io.EncoderFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.ByteArrayOutputStream;
+
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -24,6 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "hams.logging=true",
     "hams.checks.timeout=5",
     "hams.checks.fails=2",
+    "hams.checks.preflights=",
+    "hams.checks.shutdowns=",
 
     // Runtime
     "runtime.threads=1",
@@ -57,8 +69,14 @@ public class DynamicRouteTest {
     @Autowired
     private CacheStore cacheStore;
 
+    @MockBean
+    private SchemaService schemaService;
+
     @Test
     void testListRecords() throws Exception {
+        // Need to use valid Avro or just ensure listRecords doesn't care
+        // listRecords only lists keys, so values don't matter?
+        // CacheStore stores byte[], listRecords reads keys. Safe.
         cacheStore.put("key1", "val1".getBytes());
         cacheStore.put("key2", "val2".getBytes());
 
@@ -70,13 +88,26 @@ public class DynamicRouteTest {
 
     @Test
     void testGetRecord() throws Exception {
-        byte[] content = "hello".getBytes();
+        Schema schema = Schema.create(Schema.Type.STRING);
+        when(schemaService.getSchema(anyInt())).thenReturn(schema);
+
+        // Encode "hello" in Avro
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(0); // Magic
+        out.write(0); out.write(0); out.write(0); out.write(1); // Schema ID 1
+
+        BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(out, null);
+        GenericDatumWriter<Object> writer = new GenericDatumWriter<>(schema);
+        writer.write("hello", encoder);
+        encoder.flush();
+
+        byte[] content = out.toByteArray();
         cacheStore.put("key1", content);
 
         mockMvc.perform(get("/api/key1"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "max-age=60, public"))
-                .andExpect(content().bytes(content));
+                .andExpect(content().json("\"hello\""));
     }
 
     @Test

@@ -1,9 +1,6 @@
 package com.polecatworks.pushcache.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.polecatworks.pushcache.config.AppConfig;
-import org.apache.avro.Schema;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
@@ -13,13 +10,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
@@ -30,22 +24,26 @@ public class KafkaConsumerService {
     private final AppConfig appConfig;
     private final CacheStore cacheStore;
     private final Environment environment;
-    private final RestClient restClient;
     private final Function<Properties, Consumer<String, byte[]>> consumerFactory;
-    private final Map<Integer, Schema> schemaCache = new ConcurrentHashMap<>();
+    private final SchemaService schemaService;
+    private final MetricsService metricsService;
+    private final LagClearedHealthIndicator lagHealthIndicator;
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private long lastLagCheck = 0;
+    private static final long LAG_CHECK_INTERVAL = 1000;
 
     @Autowired
-    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment) {
-        this(appConfig, cacheStore, environment, RestClient.builder().build(), KafkaConsumer::new);
+    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment, SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator) {
+        this(appConfig, cacheStore, environment, schemaService, metricsService, lagHealthIndicator, KafkaConsumer::new);
     }
 
-    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment, RestClient restClient, Function<Properties, Consumer<String, byte[]>> consumerFactory) {
+    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment, SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator, Function<Properties, Consumer<String, byte[]>> consumerFactory) {
         this.appConfig = appConfig;
         this.cacheStore = cacheStore;
         this.environment = environment;
-        this.restClient = restClient;
+        this.schemaService = schemaService;
+        this.metricsService = metricsService;
+        this.lagHealthIndicator = lagHealthIndicator;
         this.consumerFactory = consumerFactory;
     }
 
@@ -84,6 +82,12 @@ public class KafkaConsumerService {
                     ConsumerRecords<String, byte[]> records = consumer.poll(Duration.ofMillis(100));
                     for (ConsumerRecord<String, byte[]> record : records) {
                         processRecord(record);
+                    }
+
+                    long now = System.currentTimeMillis();
+                    if (now - lastLagCheck > LAG_CHECK_INTERVAL) {
+                        checkLag(consumer);
+                        lastLagCheck = now;
                     }
                 }
             }
@@ -134,6 +138,33 @@ public class KafkaConsumerService {
         return props;
     }
 
+    private void checkLag(Consumer<String, byte[]> consumer) {
+        try {
+            Set<TopicPartition> assignment = consumer.assignment();
+            if (assignment.isEmpty()) return;
+
+            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(assignment);
+            long totalLag = 0;
+
+            for (TopicPartition tp : assignment) {
+                long position = consumer.position(tp);
+                Long end = endOffsets.get(tp);
+                if (end != null) {
+                    totalLag += Math.max(0, end - position);
+                }
+            }
+
+            metricsService.setConsumerLag(totalLag);
+
+            if (totalLag == 0 && !lagHealthIndicator.isCleared()) {
+                logger.info("Startup lag cleared, application is now Ready");
+                lagHealthIndicator.setCleared(true);
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to check consumer lag", e);
+        }
+    }
+
     private void processRecord(ConsumerRecord<String, byte[]> record) {
         String key = record.key();
         byte[] value = record.value();
@@ -142,6 +173,7 @@ public class KafkaConsumerService {
             // Tombstone
             if (key != null) {
                 cacheStore.remove(key);
+                metricsService.incrementTombstonesProcessed();
                 logger.debug("Removed record for key: {}", key);
             }
             return;
@@ -150,45 +182,28 @@ public class KafkaConsumerService {
         // Avro check: Magic byte must be 0
         if (value.length < 5 || value[0] != 0x00) {
             logger.warn("Received invalid or non-confluent message for key: {}", key);
+            metricsService.incrementSchemaMismatchCount();
             return;
         }
+
+        metricsService.incrementUpdatesReceived();
 
         ByteBuffer buffer = ByteBuffer.wrap(value);
         buffer.get(); // Skip magic byte
         int schemaId = buffer.getInt();
 
-        if (!schemaCache.containsKey(schemaId)) {
-            fetchAndCacheSchema(schemaId);
+        // Ensure schema is cached (prefetch)
+        try {
+            schemaService.getSchema(schemaId);
+        } catch (Exception e) {
+            logger.error("Failed to prefetch schema {}", schemaId, e);
+            // We continue even if schema fetch failed?
+            // If we can't get schema, the web handler will also fail.
+            // But we still cache the bytes.
         }
 
         if (key != null) {
             cacheStore.put(key, value);
-        }
-    }
-
-    private void fetchAndCacheSchema(int id) {
-        try {
-            String registryUrl = appConfig.getKafka().getSchemaRegistryUrl().toString();
-            if (registryUrl.endsWith("/")) {
-                registryUrl = registryUrl.substring(0, registryUrl.length() - 1);
-            }
-            String url = registryUrl + "/schemas/ids/" + id;
-            logger.info("Fetching schema ID {} from Schema Registry at {}", id, registryUrl);
-
-            String response = restClient.get()
-                    .uri(url)
-                    .retrieve()
-                    .body(String.class);
-
-            if (response != null) {
-                JsonNode node = objectMapper.readTree(response);
-                String schemaStr = node.get("schema").asText();
-                Schema schema = new Schema.Parser().parse(schemaStr);
-                schemaCache.put(id, schema);
-                logger.info("Cached schema for ID: {}", id);
-            }
-        } catch (Exception e) {
-            logger.error("Failed to fetch schema {}", id, e);
         }
     }
 }

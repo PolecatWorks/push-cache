@@ -44,6 +44,7 @@ public class WebConfig {
                         .GET("/", handler::listRecords)
                         .GET("/{id}", handler::getRecord)
                         .DELETE("/{id}", handler::deleteRecord)
+                        .POST("/{id}", handler::createRecord)
                 )
                 .build();
     }

@@ -2,22 +2,27 @@ package com.polecatworks.pushcache.web;
 
 import com.polecatworks.pushcache.config.AppConfig;
 import com.polecatworks.pushcache.service.CacheStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Component
 public class RecordHandler {
+
+    private static final Logger logger = LoggerFactory.getLogger(RecordHandler.class);
 
     private final CacheStore cacheStore;
     private final AppConfig appConfig;
@@ -59,6 +64,39 @@ public class RecordHandler {
         return ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(pagedKeys);
+    }
+
+    public ServerResponse createRecord(ServerRequest request) {
+        String id = request.pathVariable("id");
+        byte[] body;
+        try {
+            body = request.body(byte[].class);
+        } catch (Exception e) {
+            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Collections.singletonMap("message", "Failed to read body"));
+        }
+
+        if (body.length < 5) {
+            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Collections.singletonMap("message", "Payload too short"));
+        }
+
+        if (body[0] != 0) {
+            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Collections.singletonMap("message", "Invalid Magic Byte"));
+        }
+
+        int schemaId = ByteBuffer.wrap(body, 1, 4).getInt();
+        logger.info("Received record with Schema ID: {}", schemaId);
+
+        cacheStore.put(id, body);
+
+        return ServerResponse.status(HttpStatus.CREATED)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Collections.singletonMap("id", id));
     }
 
     public ServerResponse getRecord(ServerRequest request) {

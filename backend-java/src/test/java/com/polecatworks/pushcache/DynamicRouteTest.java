@@ -12,6 +12,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -96,5 +97,47 @@ public class DynamicRouteTest {
         // Ensure it is gone
         mockMvc.perform(get("/api/del_key"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void testCreateRecordSuccess() throws Exception {
+        byte[] body = new byte[10];
+        body[0] = 0; // Magic byte
+        // Schema ID 1 (Big Endian: 0 0 0 1)
+        body[1] = 0;
+        body[2] = 0;
+        body[3] = 0;
+        body[4] = 1;
+        // Data
+        body[5] = 0x10;
+
+        mockMvc.perform(post("/api/new_record")
+                .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value("new_record"));
+
+        // Verify it is in cache
+        byte[] cached = cacheStore.get("new_record");
+        org.junit.jupiter.api.Assertions.assertArrayEquals(body, cached);
+    }
+
+    @Test
+    void testCreateRecordPayloadTooShort() throws Exception {
+        byte[] body = new byte[4];
+        mockMvc.perform(post("/api/short_record")
+                .content(body))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("Payload too short"));
+    }
+
+    @Test
+    void testCreateRecordInvalidMagicByte() throws Exception {
+        byte[] body = new byte[10];
+        body[0] = 1; // Invalid Magic byte
+
+        mockMvc.perform(post("/api/bad_magic")
+                .content(body))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("Invalid Magic Byte"));
     }
 }

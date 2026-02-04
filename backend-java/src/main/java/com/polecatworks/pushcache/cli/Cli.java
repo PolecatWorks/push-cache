@@ -54,6 +54,7 @@ public class Cli {
              System.setProperty("spring.config.additional-location", "file:" + config.getAbsolutePath());
              System.setProperty("spring.config.import", "optional:configtree:" + secrets.getAbsolutePath() + "/");
              System.setProperty("spring.main.web-application-type", "none");
+             System.setProperty("startup-checks.enabled", "false");
              SpringApplication.run(PushCacheApplication.class).close();
         }
     }

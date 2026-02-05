@@ -2,18 +2,22 @@ use crate::kafka_utils::get_broker_string;
 
 use futures::TryStreamExt;
 use rdkafka::Message;
+use rdkafka::Offset;
 use rdkafka::client::ClientContext;
 use rdkafka::config::ClientConfig;
-use rdkafka::consumer::{Consumer, ConsumerContext, StreamConsumer};
+use rdkafka::consumer::{BaseConsumer, Consumer, ConsumerContext, Rebalance, StreamConsumer};
 use rdkafka::statistics::Statistics;
 use schema_registry_converter::schema_registry_common::BytesResult::Valid;
 use schema_registry_converter::schema_registry_common::get_bytes_result;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{error, info, warn};
 
 use crate::MyState;
 use crate::error::MyError;
 use hamsrs::probes::ProbeManual;
+
+use rdkafka::TopicPartitionList;
 
 // Context to handle statistics callbacks
 struct ConsumerStatsContext {
@@ -62,7 +66,45 @@ impl ClientContext for ConsumerStatsContext {
     }
 }
 
-impl ConsumerContext for ConsumerStatsContext {}
+impl ConsumerContext for ConsumerStatsContext {
+    fn post_rebalance(&self, base_consumer: &BaseConsumer<Self>, rebalance: &Rebalance) {
+        match rebalance {
+            Rebalance::Assign(partitions) => {
+                info!("Assigning partitions: {:?}", partitions);
+
+                if self.state.config.kafka.force_reset_earliest {
+                    info!("Forcing reset to earliest for all partitions");
+                    let mut assigned_partitions = TopicPartitionList::new();
+                    for p in partitions.elements() {
+                        if let Err(e) = assigned_partitions.add_partition_offset(
+                            p.topic(),
+                            p.partition(),
+                            Offset::Beginning,
+                        ) {
+                            error!("Failed to add partition offset: {}", e);
+                        }
+                    }
+                    if let Err(e) = base_consumer.assign(&assigned_partitions) {
+                        error!("Failed to assign partitions: {}", e);
+                    }
+                } else {
+                    if let Err(e) = base_consumer.assign(partitions) {
+                        error!("Failed to assign partitions: {}", e);
+                    }
+                }
+            }
+            Rebalance::Revoke(partitions) => {
+                info!("Revoking partitions: {:?}", partitions);
+                if let Err(e) = base_consumer.unassign() {
+                    error!("Failed to unassign partitions: {}", e);
+                }
+            }
+            Rebalance::Error(e) => {
+                error!("Rebalance error: {}", e);
+            }
+        }
+    }
+}
 
 pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<(), MyError> {
     let kafka_config = &state.config.kafka;

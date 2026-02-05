@@ -1,0 +1,62 @@
+name: Backend Java Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+    paths:
+      - "backend-java/**"
+      - ".github/workflows/backend-java-docker-publish.yml"
+      - ".github/workflows/backend-java-release.yml"
+
+env:
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}-backend-java
+
+jobs:
+  release:
+    name: Release Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: |
+          repo_name="${{ github.repository }}"
+          echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java" >> $GITHUB_ENV
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add Release Tag
+        run: |
+          # Source image linked to the commit sha
+          SRC_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}:sha-${{ github.sha }}"
+          # Target image with the release tag
+          TARGET_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}:${{ github.ref_name }}"
+
+          # Validate SemVer
+          if [[ ! "${{ github.ref_name }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Tag '${{ github.ref_name }}' is not valid SemVer (e.g. 1.0.0)"
+            exit 1
+          fi
+
+          echo "Checking if source image exists: $SRC_IMAGE"
+          if ! docker buildx imagetools inspect "$SRC_IMAGE" > /dev/null 2>&1; then
+            echo "Error: Source image $SRC_IMAGE does not exist."
+            echo "The release commit must successfully build on main before release."
+            exit 1
+          fi
+
+          echo "Retagging $SRC_IMAGE to $TARGET_IMAGE"
+          docker buildx imagetools create -t "$TARGET_IMAGE" "$SRC_IMAGE"

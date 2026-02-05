@@ -1,0 +1,247 @@
+name: backend-java Docker
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}-backend-java
+
+concurrency:
+  # This concurrency group ensures that only one job in the group runs at a time.
+  # If a new job is triggered, the previous one will be canceled.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-paths:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_java: ${{ steps.filter.outputs.backend_java }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend_java:
+              - 'backend-java/**'
+              - '.github/workflows/backend-java-docker-publish.yml'
+
+  build:
+    needs: check-paths
+    if: needs.check-paths.outputs.backend_java == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+
+    # runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-24.04' || matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' }}
+    name: ${{ matrix.platform }} Backend Java Docker
+    permissions:
+      contents: read
+      packages: write
+      # This is used to complete the identity challenge
+      # with sigstore/fulcio when running outside of PRs.
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - &prepare_step
+        name: Prepare environment for current platform
+        # This step sets up the environment for the current platform being built.
+        # It replaces the '/' character in the platform name with '-' and sets it as an environment variable.
+        # This is useful for naming artifacts and other resources that cannot contain '/'.
+        # The environment variable PLATFORMS_PAIR will be used later in the workflow.
+        id: prepare
+        run: |
+          platform=${{ matrix.platform }}
+          repo_name="${{ github.repository }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java/dev" >> $GITHUB_ENV
+          else
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java" >> $GITHUB_ENV
+          fi
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+
+      # Set up BuildKit Docker container builder
+      # https://github.com/docker/setup-buildx-action
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: ${{ matrix.platform }}
+
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract metadata (tags, labels) for Docker
+      # https://github.com/docker/metadata-action
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # Build and push Docker image
+      # https://github.com/docker/build-push-action
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: backend-java
+          push: ${{ github.event_name != 'pull_request' }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
+          cache-from: |
+            type=gha,scope=${{ github.repository }}-backend-java-${{ github.ref_name }}-${{ matrix.platform }}
+            type=gha,scope=${{ github.repository }}-backend-java-main-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-backend-java-${{ github.ref_name }}-${{ matrix.platform }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v5
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge Docker manifests
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      actions: read
+      checks: read
+      contents: read
+      deployments: none
+      id-token: write
+      issues: read
+      discussions: read
+      packages: write
+      pages: none
+      pull-requests: read
+      repository-projects: read
+      security-events: read
+      statuses: read
+    needs:
+      - build
+    steps:
+      - name: Prepare environment
+        run: |
+          repo_name="${{ github.repository }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java/dev" >> $GITHUB_ENV
+          else
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java" >> $GITHUB_ENV
+          fi
+
+      - name: Download digests
+        uses: actions/download-artifact@v6
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}
+          annotations: |
+            type=org.opencontainers.image.description,value=${{ github.event.repository.description || 'No description provided' }}
+          tags: |
+            type=raw,value=main,enable=${{ github.ref_name == 'main' }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+            type=sha,format=long
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get execution timestamp with RFC3339 format
+        id: timestamp
+        run: |
+          echo "timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        id: manifest-annotate
+        continue-on-error: true
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            --annotation='index:org.opencontainers.image.description=${{ github.event.repository.description }}' \
+            --annotation='index:org.opencontainers.image.created=${{ steps.timestamp.outputs.timestamp }}' \
+            --annotation='index:org.opencontainers.image.url=${{ github.event.repository.url }}' \
+            --annotation='index:org.opencontainers.image.source=${{ github.event.repository.url }}' \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}@sha256:%s ' *)
+
+      - name: Create manifest list and push without annotations
+        if: steps.manifest-annotate.outcome == 'failure'
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create  $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}@sha256:%s ' *)
+
+      - name: Inspect image
+        id: inspect
+        run: |
+          docker buildx imagetools inspect '${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}:${{ steps.meta.outputs.version }}'
+
+  ci-success:
+    name: Backend Java CI Success
+    needs: [check-paths, merge]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Status
+        run: |
+          if [[ "${{ needs.check-paths.outputs.backend_java }}" == 'true' ]]; then
+            if [[ "${{ needs.merge.result }}" != 'success' ]]; then
+               echo "Build/Merge failed!"
+               exit 1
+            fi
+          fi
+          echo "Success!"

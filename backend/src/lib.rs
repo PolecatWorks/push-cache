@@ -166,9 +166,9 @@ pub async fn service_cancellable(ct: CancellationToken, config: &MyConfig) -> Re
 
     hams.start().unwrap();
 
-    if state.config.kafka.force_reset_earliest {
-        crate::kafka_utils::reset_consumer_offsets(&state.config.kafka).await?;
-    }
+    // if state.config.kafka.force_reset_earliest {
+    //     crate::kafka_utils::reset_consumer_offsets(&state.config.kafka).await?;
+    // }
 
     // Start Kafka Consumer
     let consumer_state = state.clone();

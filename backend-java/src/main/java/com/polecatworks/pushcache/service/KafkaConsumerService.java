@@ -33,11 +33,14 @@ public class KafkaConsumerService {
     private static final long LAG_CHECK_INTERVAL = 1000;
 
     @Autowired
-    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment, SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator) {
+    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment,
+            SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator) {
         this(appConfig, cacheStore, environment, schemaService, metricsService, lagHealthIndicator, KafkaConsumer::new);
     }
 
-    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment, SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator, Function<Properties, Consumer<String, byte[]>> consumerFactory) {
+    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment,
+            SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator,
+            Function<Properties, Consumer<String, byte[]>> consumerFactory) {
         this.appConfig = appConfig;
         this.cacheStore = cacheStore;
         this.environment = environment;
@@ -66,16 +69,26 @@ public class KafkaConsumerService {
 
     private void runConsumer() {
         try {
-            if (appConfig.getKafka().isForceResetEarliest()) {
-                resetOffsets();
-            }
-
             Properties props = getConsumerProperties();
             props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
-            props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, appConfig.getKafka().getOffsetReset().toString().toLowerCase());
+            props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
+                    appConfig.getKafka().getOffsetReset().toString().toLowerCase());
 
             try (Consumer<String, byte[]> consumer = consumerFactory.apply(props)) {
-                consumer.subscribe(Collections.singletonList(appConfig.getKafka().getTopic()));
+                consumer.subscribe(Collections.singletonList(appConfig.getKafka().getTopic()),
+                        new ConsumerRebalanceListener() {
+                            @Override
+                            public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+                            }
+
+                            @Override
+                            public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+                                if (appConfig.getKafka().isForceResetEarliest()) {
+                                    logger.info("Seeking to beginning for partitions: {}", partitions);
+                                    consumer.seekToBeginning(partitions);
+                                }
+                            }
+                        });
                 logger.info("Started Kafka consumer for topic: {}", appConfig.getKafka().getTopic());
 
                 while (running.get()) {
@@ -97,37 +110,13 @@ public class KafkaConsumerService {
         }
     }
 
-    private void resetOffsets() {
-        logger.info("Forcing consumer group offsets to earliest for topic: {}", appConfig.getKafka().getTopic());
-        Properties props = getConsumerProperties();
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-
-        try (Consumer<String, byte[]> consumer = consumerFactory.apply(props)) {
-            String topic = appConfig.getKafka().getTopic();
-            List<TopicPartition> partitions = new ArrayList<>();
-            consumer.partitionsFor(topic).forEach(p -> partitions.add(new TopicPartition(topic, p.partition())));
-
-            if (partitions.isEmpty()) {
-                logger.warn("Topic {} has no partitions", topic);
-                return;
-            }
-
-            consumer.assign(partitions);
-            consumer.seekToBeginning(partitions);
-            consumer.commitSync();
-            logger.info("Successfully reset consumer group offsets to earliest.");
-        } catch (Exception e) {
-             logger.error("Failed to reset offsets", e);
-             throw new RuntimeException("Failed to reset offsets", e);
-        }
-    }
-
     private Properties getConsumerProperties() {
         Properties props = new Properties();
         String host = appConfig.getKafka().getBrokers().getHost();
         int port = appConfig.getKafka().getBrokers().getPort();
         if (host == null || port == -1) {
-             throw new RuntimeException("Kafka broker host or port not defined in URI: " + appConfig.getKafka().getBrokers());
+            throw new RuntimeException(
+                    "Kafka broker host or port not defined in URI: " + appConfig.getKafka().getBrokers());
         }
         String brokerString = host + ":" + port;
 
@@ -141,7 +130,8 @@ public class KafkaConsumerService {
     private void checkLag(Consumer<String, byte[]> consumer) {
         try {
             Set<TopicPartition> assignment = consumer.assignment();
-            if (assignment.isEmpty()) return;
+            if (assignment.isEmpty())
+                return;
 
             Map<TopicPartition, Long> endOffsets = consumer.endOffsets(assignment);
             long totalLag = 0;

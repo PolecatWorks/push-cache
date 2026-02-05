@@ -43,7 +43,6 @@ public class WebConfig {
         return RouterFunctions.route()
                 .path(path, builder -> builder
                         .GET("", handler::listRecords)
-                        .GET("/", handler::listRecords)
                         .GET("/{id}", handler::getRecord)
                         .DELETE("/{id}", handler::deleteRecord)
                         .POST("/{id}", handler::createRecord))

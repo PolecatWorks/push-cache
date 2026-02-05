@@ -15,15 +15,14 @@ import org.slf4j.LoggerFactory;
 @SpringBootApplication
 @EnableConfigurationProperties(AppConfig.class)
 public class PushCacheApplication {
-
     private static final Logger logger = LoggerFactory.getLogger(PushCacheApplication.class);
 
-	public static void main(String[] args) {
-		int exitCode = new CommandLine(new Cli()).execute(args);
+    public static void main(String[] args) {
+        int exitCode = new CommandLine(new Cli()).execute(args);
         if (exitCode != 0) {
             System.exit(exitCode);
         }
-	}
+    }
 
     @Bean
     public CommandLineRunner printConfig(AppConfig appConfig, ObjectMapper objectMapper) {

@@ -78,10 +78,10 @@ done
 echo "Server is UP!"
 
 # 6. Run Load Test
-echo "Running Load Test against /dynamic/$GENERATED_KEY"
+echo "Running Load Test against /cache/$GENERATED_KEY"
 echo "Concurrency: $CONCURRENCY, Duration: $DURATION"
 
 # Use the dynamic endpoint which supports all message types
-oha -c $CONCURRENCY -z $DURATION "http://localhost:8080/dynamic/$GENERATED_KEY"
+oha -c $CONCURRENCY -z $DURATION "http://localhost:8080/cache/$GENERATED_KEY"
 
 echo "Load Test Complete."

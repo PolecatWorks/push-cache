@@ -87,10 +87,8 @@ impl ConsumerContext for ConsumerStatsContext {
                     if let Err(e) = base_consumer.assign(&assigned_partitions) {
                         error!("Failed to assign partitions: {}", e);
                     }
-                } else {
-                    if let Err(e) = base_consumer.assign(partitions) {
-                        error!("Failed to assign partitions: {}", e);
-                    }
+                } else if let Err(e) = base_consumer.assign(partitions) {
+                    error!("Failed to assign partitions: {}", e);
                 }
             }
             Rebalance::Revoke(partitions) => {

@@ -28,38 +28,38 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-    // Hams
-    "hams.address=0.0.0.0:8079",
-    "hams.prefix=hams",
-    "hams.logging=true",
-    "hams.checks.timeout=5",
-    "hams.checks.fails=2",
-    "hams.checks.preflights=",
-    "hams.checks.shutdowns=",
+        // Hams
+        "hams.address=0.0.0.0:8079",
+        "hams.prefix=hams",
+        "hams.logging=true",
+        "hams.checks.timeout=5",
+        "hams.checks.fails=2",
+        "hams.checks.preflights=",
+        "hams.checks.shutdowns=",
 
-    // Runtime
-    "runtime.threads=1",
-    "runtime.stack-size=1024",
-    "runtime.name=test",
+        // Runtime
+        "runtime.threads=1",
+        "runtime.stack-size=1024",
+        "runtime.name=test",
 
-    // WebService
-    "webservice.address=http://localhost:8080/api",
-    "webservice.path-dynamic=dynamic",
+        // WebService
+        "webservice.address=http://localhost:8080/api",
+        "webservice.path-dynamic=dynamic",
 
-    // Kafka
-    "kafka.brokers=tcp://localhost:9092",
-    "kafka.group-id=test",
-    "kafka.topic=test",
-    "kafka.schema-registry-url=http://localhost:8081",
-    "kafka.cache-max-age=60s",
-    "kafka.fetch-metadata-timeout=5s",
-    "kafka.offset-reset=earliest",
-    "kafka.force-reset-earliest=false",
+        // Kafka
+        "kafka.brokers=tcp://localhost:9092",
+        "kafka.group-id=test",
+        "kafka.topic=test",
+        "kafka.schema-registry-url=http://localhost:8081",
+        "kafka.cache-max-age=60s",
+        "kafka.fetch-metadata-timeout=5s",
+        "kafka.offset-reset=earliest",
+        "kafka.force-reset-earliest=false",
 
-    // Startup Checks
-    "startup-checks.fails=1",
-    "startup-checks.timeout=100ms",
-    "startup-checks.enabled=false"
+        // Startup Checks
+        "startup-checks.fails=1",
+        "startup-checks.timeout=100ms",
+        "startup-checks.enabled=false"
 })
 public class DynamicRouteTest {
 
@@ -87,6 +87,18 @@ public class DynamicRouteTest {
     }
 
     @Test
+    void testListRecordsNoTrailingSlash() throws Exception {
+        cacheStore.put("key1", "val1".getBytes());
+        cacheStore.put("key2", "val2".getBytes());
+
+        // /api is configured as base path, so /api should work same as /api/
+        mockMvc.perform(get("/api"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$", contains("key1", "key2")));
+    }
+
+    @Test
     void testGetRecord() throws Exception {
         Schema schema = Schema.create(Schema.Type.STRING);
         when(schemaService.getSchema(anyInt())).thenReturn(schema);
@@ -94,7 +106,10 @@ public class DynamicRouteTest {
         // Encode "hello" in Avro
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(0); // Magic
-        out.write(0); out.write(0); out.write(0); out.write(1); // Schema ID 1
+        out.write(0);
+        out.write(0);
+        out.write(0);
+        out.write(1); // Schema ID 1
 
         BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(out, null);
         GenericDatumWriter<Object> writer = new GenericDatumWriter<>(schema);

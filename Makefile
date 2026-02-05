@@ -30,13 +30,7 @@ backend-java-run:
 
 backend-java-dev:
 	cd backend-java && \
-	./gradlew bootRun --args="start --config ../backend/test-data/config-localhost.yaml --secrets ../backend/test-data/secrets"
-
-# export JAVA_TOOL_OPTIONS='-Dspring.devtools.restart.enabled=true'
-
-# 	export JAVA_HOME=`/usr/libexec/java_home -v 21` && cd ${BE_JAVA_DIR} && ./gradlew -t bootRun --args='start --config ../${BE_DIR}/test-data/config-localhost.yaml --secrets ../${BE_DIR}/test-data/secrets'
-# 	export JAVA_HOME=`/usr/libexec/java_home -v 21` && cd ${BE_JAVA_DIR} && ./gradlew bootRun --args="start"
-# 	--args="--config" --args="../${BE_DIR}/test-data/config-localhost.yaml --secrets ../${BE_DIR}/test-data/secrets"
+	./gradlew bootRun --args='start --config ../backend/test-data/config-localhost.yaml --secrets ../backend/test-data/secrets'
 
 backend-docker: PKG_NAME=push-cache
 backend-docker:

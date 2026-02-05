@@ -13,7 +13,7 @@ import picocli.CommandLine.Option;
 import java.io.File;
 import java.util.Properties;
 
-@Command(name = "push-cache", subcommands = {Cli.Version.class, Cli.Start.class, Cli.ConfigCheck.class})
+@Command(name = "push-cache", subcommands = { Cli.Version.class, Cli.Start.class, Cli.ConfigCheck.class })
 public class Cli {
 
     @Command(name = "version", description = "Show version of application")
@@ -28,34 +28,35 @@ public class Cli {
     public static class Start implements Runnable {
         private static final Logger logger = LoggerFactory.getLogger(Start.class);
 
-        @Option(names = {"-c", "--config"}, required = true, description = "Sets a custom config file")
+        @Option(names = { "-c", "--config" }, required = true, description = "Sets a custom config file")
         public File config;
 
-        @Option(names = {"-s", "--secrets"}, defaultValue = "secrets", description = "Sets a custom secrets directory")
+        @Option(names = { "-s",
+                "--secrets" }, defaultValue = "secrets", description = "Sets a custom secrets directory")
         public File secrets;
 
         @Override
         public void run() {
-             logger.info("Starting push-cache:0.0.1-SNAPSHOT");
-             System.setProperty("spring.config.additional-location", "file:" + config.getAbsolutePath());
-             System.setProperty("spring.config.import", "optional:configtree:" + secrets.getAbsolutePath() + "/");
+            logger.info("Starting push-cache:0.0.1-SNAPSHOT");
+            System.setProperty("spring.config.additional-location", "file:" + config.getAbsolutePath());
+            System.setProperty("spring.config.import", "optional:configtree:" + secrets.getAbsolutePath() + "/");
 
-             SpringApplication app = new SpringApplication(PushCacheApplication.class);
-             app.addListeners((ApplicationListener<ApplicationEnvironmentPreparedEvent>) event -> {
-                 ConfigurableEnvironment env = event.getEnvironment();
-                 String hamsAddress = env.getProperty("hams.address");
-                 if (hamsAddress != null) {
-                     String[] parts = hamsAddress.split(":");
-                     if (parts.length == 2) {
-                         Properties props = new Properties();
-                         props.put("management.server.address", parts[0]);
-                         props.put("management.server.port", parts[1]);
-                         props.put("management.endpoints.web.exposure.include", "health,prometheus");
-                         env.getPropertySources().addFirst(new PropertiesPropertySource("hamsConfig", props));
-                     }
-                 }
-             });
-             app.run();
+            SpringApplication app = new SpringApplication(PushCacheApplication.class);
+            app.addListeners((ApplicationListener<ApplicationEnvironmentPreparedEvent>) event -> {
+                ConfigurableEnvironment env = event.getEnvironment();
+                String hamsAddress = env.getProperty("hams.address");
+                if (hamsAddress != null) {
+                    String[] parts = hamsAddress.split(":");
+                    if (parts.length == 2) {
+                        Properties props = new Properties();
+                        props.put("management.server.address", parts[0]);
+                        props.put("management.server.port", parts[1]);
+                        props.put("management.endpoints.web.exposure.include", "health,prometheus");
+                        env.getPropertySources().addFirst(new PropertiesPropertySource("hamsConfig", props));
+                    }
+                }
+            });
+            app.run();
         }
     }
 
@@ -63,20 +64,21 @@ public class Cli {
     public static class ConfigCheck implements Runnable {
         private static final Logger logger = LoggerFactory.getLogger(ConfigCheck.class);
 
-        @Option(names = {"-c", "--config"}, required = true, description = "Sets a custom config file")
+        @Option(names = { "-c", "--config" }, required = true, description = "Sets a custom config file")
         public File config;
 
-        @Option(names = {"-s", "--secrets"}, defaultValue = "secrets", description = "Sets a custom secrets directory")
+        @Option(names = { "-s",
+                "--secrets" }, defaultValue = "secrets", description = "Sets a custom secrets directory")
         public File secrets;
 
         @Override
         public void run() {
-             logger.info("Config check push-cache for 0.0.1-SNAPSHOT");
-             System.setProperty("spring.config.additional-location", "file:" + config.getAbsolutePath());
-             System.setProperty("spring.config.import", "optional:configtree:" + secrets.getAbsolutePath() + "/");
-             System.setProperty("spring.main.web-application-type", "none");
-             System.setProperty("startup-checks.enabled", "false");
-             SpringApplication.run(PushCacheApplication.class).close();
+            logger.info("Config check push-cache for 0.0.1-SNAPSHOT");
+            System.setProperty("spring.config.additional-location", "file:" + config.getAbsolutePath());
+            System.setProperty("spring.config.import", "optional:configtree:" + secrets.getAbsolutePath() + "/");
+            System.setProperty("spring.main.web-application-type", "none");
+            System.setProperty("startup-checks.enabled", "false");
+            SpringApplication.run(PushCacheApplication.class).close();
         }
     }
 }

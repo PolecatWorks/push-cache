@@ -39,7 +39,8 @@ public class RecordHandler {
     private final SchemaService schemaService;
     private final MetricsService metricsService;
 
-    public RecordHandler(CacheStore cacheStore, AppConfig appConfig, SchemaService schemaService, MetricsService metricsService) {
+    public RecordHandler(CacheStore cacheStore, AppConfig appConfig, SchemaService schemaService,
+            MetricsService metricsService) {
         this.cacheStore = cacheStore;
         this.appConfig = appConfig;
         this.schemaService = schemaService;
@@ -74,6 +75,8 @@ public class RecordHandler {
                 .skip(offset)
                 .limit(limit)
                 .collect(Collectors.toList());
+
+        System.err.println("Returning " + pagedKeys.size() + " keys f");
 
         return ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_JSON)
@@ -132,7 +135,7 @@ public class RecordHandler {
             ByteBuffer buffer = ByteBuffer.wrap(data);
             byte magic = buffer.get();
             if (magic != 0) {
-                 throw new RuntimeException("Invalid Avro message format");
+                throw new RuntimeException("Invalid Avro message format");
             }
             int schemaId = buffer.getInt();
 
@@ -140,9 +143,9 @@ public class RecordHandler {
             try {
                 schema = schemaService.getSchema(schemaId);
             } catch (Exception e) {
-                 return ServerResponse.status(HttpStatus.NOT_FOUND)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "Schema not found in cache"));
+                return ServerResponse.status(HttpStatus.NOT_FOUND)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(Collections.singletonMap("message", "Schema not found in cache"));
             }
 
             int binaryStart = buffer.position();
@@ -168,9 +171,10 @@ public class RecordHandler {
 
         } catch (Exception e) {
             logger.error("Error processing record {}", id, e);
-             return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", e.getMessage() != null ? e.getMessage() : "Avro Deserialization Error"));
+                    .body(Collections.singletonMap("message",
+                            e.getMessage() != null ? e.getMessage() : "Avro Deserialization Error"));
         }
     }
 
@@ -179,7 +183,7 @@ public class RecordHandler {
         byte[] data = cacheStore.remove(id);
 
         if (data == null) {
-             return ServerResponse.status(HttpStatus.NOT_FOUND)
+            return ServerResponse.status(HttpStatus.NOT_FOUND)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Collections.singletonMap("message", "User not found"));
         }

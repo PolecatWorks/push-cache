@@ -18,7 +18,25 @@ public class PushCacheApplication {
     private static final Logger logger = LoggerFactory.getLogger(PushCacheApplication.class);
 
     public static void main(String[] args) {
-        int exitCode = new CommandLine(new Cli()).execute(args);
+        if (args == null || args.length == 0) {
+            String savedArgs = System.getProperty("app.saved.args");
+            if (savedArgs != null) {
+                args = savedArgs.split("\\|\\|\\|");
+            }
+        } else {
+            System.setProperty("app.saved.args", String.join("|||", args));
+        }
+
+        CommandLine cmd = new CommandLine(new Cli());
+        cmd.setExecutionExceptionHandler((ex, commandLine, parseResult) -> {
+            if (ex.getClass().getName().endsWith("SilentExitException")) {
+                return 0;
+            }
+            ex.printStackTrace();
+            return commandLine.getCommandSpec().exitCodeOnExecutionException();
+        });
+
+        int exitCode = cmd.execute(args);
         if (exitCode != 0) {
             System.exit(exitCode);
         }

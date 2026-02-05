@@ -30,7 +30,13 @@ backend-java-run:
 
 backend-java-dev:
 	cd backend-java && \
+	export JAVA_HOME=`/usr/libexec/java_home -v 21` && \
 	./gradlew bootRun --args='start --config ../backend/test-data/config-localhost.yaml --secrets ../backend/test-data/secrets'
+
+backend-java-watch:
+	cd backend-java && \
+	export JAVA_HOME=`/usr/libexec/java_home -v 21` && \
+	./gradlew -t classes
 
 backend-docker: PKG_NAME=push-cache
 backend-docker:

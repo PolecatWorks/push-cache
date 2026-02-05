@@ -33,7 +33,3 @@ dependencies {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
-
-tasks.withType<org.springframework.boot.gradle.tasks.run.BootRun> {
-    systemProperty("spring.devtools.restart.enabled", "false")
-}

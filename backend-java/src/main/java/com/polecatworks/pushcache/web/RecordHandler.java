@@ -76,7 +76,7 @@ public class RecordHandler {
                 .limit(limit)
                 .collect(Collectors.toList());
 
-        System.err.println("Returning " + pagedKeys.size() + " keys f");
+        System.err.println("Returning " + pagedKeys.size() + " keys");
 
         return ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_JSON)

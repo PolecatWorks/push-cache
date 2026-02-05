@@ -15,7 +15,8 @@ import java.net.URI;
 public class WebConfig {
 
     @Bean
-    public WebServerFactoryCustomizer<ConfigurableServletWebServerFactory> webServerFactoryCustomizer(AppConfig appConfig) {
+    public WebServerFactoryCustomizer<ConfigurableServletWebServerFactory> webServerFactoryCustomizer(
+            AppConfig appConfig) {
         return factory -> {
             URI address = appConfig.getWebservice().getAddress();
             if (address != null && address.getPort() != -1) {
@@ -41,11 +42,11 @@ public class WebConfig {
 
         return RouterFunctions.route()
                 .path(path, builder -> builder
+                        .GET("", handler::listRecords)
                         .GET("/", handler::listRecords)
                         .GET("/{id}", handler::getRecord)
                         .DELETE("/{id}", handler::deleteRecord)
-                        .POST("/{id}", handler::createRecord)
-                )
+                        .POST("/{id}", handler::createRecord))
                 .build();
     }
 }

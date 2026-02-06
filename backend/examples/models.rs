@@ -39,3 +39,5 @@ mod tests {
         assert_eq!(result.createdAt, 1000);
     }
 }
+
+fn main() {}

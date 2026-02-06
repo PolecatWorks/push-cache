@@ -7,7 +7,7 @@ use axum::{
     extract::{FromRequest, MatchedPath, Path, Query, State},
     http::HeaderMap,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
 };
 use axum_prometheus::PrometheusMetricLayer;
 use reqwest::StatusCode;
@@ -33,7 +33,6 @@ pub struct WebServiceConfig {
     /// Hostname and prefix to start the webservice on
     pub address: Url,
     pub forwarding_headers: Vec<String>,
-    pub path_dynamic: String,
 }
 
 // // Handler for POST /messages
@@ -302,6 +301,7 @@ mod tests {
     use super::*;
     use crate::MyState;
     use crate::config::{MyConfig, MyKafkaConfig};
+    use axum::routing::post;
 
     use axum::routing::delete;
     use axum::{
@@ -360,7 +360,6 @@ mod tests {
             webservice: WebServiceConfig {
                 address: "http://0.0.0.0:8080/api".parse().unwrap(),
                 forwarding_headers: vec![],
-                path_dynamic: "/dynamic".to_string(),
             },
             kafka: kafka_config,
             startup_checks: crate::config::StartupCheckConfig {

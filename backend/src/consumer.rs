@@ -9,7 +9,6 @@ use rdkafka::consumer::{BaseConsumer, Consumer, ConsumerContext, Rebalance, Stre
 use rdkafka::statistics::Statistics;
 use schema_registry_converter::schema_registry_common::BytesResult::Valid;
 use schema_registry_converter::schema_registry_common::get_bytes_result;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{error, info, warn};
 

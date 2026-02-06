@@ -15,7 +15,6 @@ runtime:
   name: push-cache
 webservice:
   address: http://0.0.0.0:8080/cache
-  path_dynamic: /dynamic
   forwarding_headers: []
 kafka:
   brokers: kafka://localhost:9092

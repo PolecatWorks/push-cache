@@ -20,8 +20,10 @@ use crate::{
 use metrics::{prometheus_response_free, prometheus_response_mystate};
 
 use crate::startup_tools::run_startup_checks;
+use crate::cache::{Cache, InMemoryCache, RedisCache};
 
 pub mod config;
+pub mod cache;
 pub mod consumer;
 pub mod error;
 pub mod hams;
@@ -36,10 +38,10 @@ pub const NAME: &str = env!("CARGO_PKG_NAME");
 /// Version of the Crate
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct MyState {
     config: MyConfig,
-    pub cache: Arc<DashMap<String, Vec<u8>>>,
+    pub cache: Arc<dyn Cache + Send + Sync>,
     pub schema_cache: Arc<DashMap<u32, Schema>>,
     // Metrics
     pub requests_total: Box<IntCounter>,
@@ -98,9 +100,18 @@ impl MyState {
             run_startup_checks(config).await?;
         }
 
+        let cache: Arc<dyn Cache + Send + Sync> = match &config.cache {
+            crate::config::CacheConfig::InMemory => {
+                 Arc::new(InMemoryCache::new(Box::new(cache_size.clone())))
+            },
+            crate::config::CacheConfig::Redis(redis_config) => {
+                 Arc::new(RedisCache::new(redis_config).await?)
+            }
+        };
+
         Ok(MyState {
             config: config.clone(),
-            cache: Arc::new(DashMap::new()),
+            cache,
             schema_cache: Arc::new(DashMap::new()),
 
             startup_lag_cleared: Arc::new(AtomicBool::new(false)),

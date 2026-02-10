@@ -143,6 +143,8 @@ Configuration is handled via `figment` and can be supplied via a YAML file or en
 | | `topic` | *Required* | Topic name to consume |
 | | `schema_registry_url` | *Required* | URL for Schema Registry |
 | | `cache_max_age_seconds` | `300` | HTTP Cache-Control max-age |
+| **cache** | `type` | *Required* | `in_memory` or `redis` |
+| | `url` | *Required if redis* | Redis connection URL |
 
 Example `config.yaml`:
 ```yaml
@@ -156,6 +158,12 @@ kafka:
   topic: "users"
   schema_registry_url: "http://localhost:8081"
   cache_max_age_seconds: 60
+
+cache:
+  type: in_memory
+  # For Redis:
+  # type: redis
+  # url: "redis://localhost:6379"
 ```
 
 ## Data Population

@@ -107,13 +107,22 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
     let kafka_config = &state.config.kafka;
     info!("Starting Kafka Consumer for topic: {}", kafka_config.topic);
 
-    let group_id = std::env::var("HOSTNAME").unwrap_or_else(|_| {
-        warn!(
-            "Failed to get hostname, using default group id {}",
-            kafka_config.group_id
-        );
-        kafka_config.group_id.clone()
-    });
+    let group_id = match state.config.cache {
+        crate::config::CacheConfig::Redis(_) => {
+            // Persistent consumer group
+            kafka_config.group_id.clone()
+        },
+        crate::config::CacheConfig::InMemory => {
+            // Ephemeral consumer group per pod
+            std::env::var("HOSTNAME").unwrap_or_else(|_| {
+                warn!(
+                    "Failed to get hostname, using default group id {}",
+                    kafka_config.group_id
+                );
+                kafka_config.group_id.clone()
+            })
+        }
+    };
     info!("Consumer group id: {group_id}");
 
     let context = ConsumerStatsContext {
@@ -134,10 +143,13 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
 
     consumer.subscribe(&[&kafka_config.topic])?;
 
-    let stream_processor = consumer.stream().try_for_each(|borrowed_message| {
-        let state = state.clone();
+    let stream_processor = consumer
+        .stream()
+        .map_err(MyError::from)
+        .try_for_each(|borrowed_message| {
+            let state = state.clone();
 
-        async move {
+            async move {
             match borrowed_message.payload() {
                 Some(payload) => {
                     let bytes_result = get_bytes_result(Some(payload));
@@ -177,7 +189,8 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
                                 if let Some(full_payload) = borrowed_message.payload() {
                                     state
                                         .cache
-                                        .insert(key_str.to_string(), full_payload.to_vec());
+                                        .insert(key_str.to_string(), full_payload.to_vec())
+                                        .await?;
                                 }
                             }
                         }
@@ -194,10 +207,7 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
                     if let Some(key_bytes) = borrowed_message.key() {
                         if let Ok(key_str) = std::str::from_utf8(key_bytes) {
                             state.tombstones_processed.inc();
-                            if state.cache.remove(key_str).is_some() {
-                                state.cache_size.dec();
-                            }
-                            state.cache.remove(key_str);
+                            state.cache.remove(key_str).await?;
                             info!("Removed record for key: {}", key_str);
                         }
                     } else {

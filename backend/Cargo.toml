@@ -46,6 +46,8 @@ apache-avro = { version = "^0.21", features = ["derive"] }
 hamsrs = { git = "https://github.com/PolecatWorks/hams.git" }
 ffi-log2 = { git = "https://github.com/PolecatWorks/hams.git" }
 schema_registry_converter = { version = "^4.7", features = ["avro", "json", "blocking"] }
+redis = { version = "1.0.3", features = ["tokio-comp", "connection-manager"] }
+async-trait = "0.1.89"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }

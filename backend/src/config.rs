@@ -69,6 +69,8 @@
 //!   fails: 2
 //!   timeout: 5s
 //!   enabled: true
+//! cache:
+//!   type: in_memory
 //! "#;
 //!
 //! let secrets_path = "/path/to/secrets";
@@ -122,6 +124,19 @@ pub struct MyConfig {
     pub webservice: WebServiceConfig,
     pub kafka: MyKafkaConfig,
     pub startup_checks: StartupCheckConfig,
+    pub cache: CacheConfig,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CacheConfig {
+    InMemory,
+    Redis(RedisConfig),
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct RedisConfig {
+    pub url: UrlWithUsernamePassword,
 }
 
 #[derive(Deserialize, Debug, Clone)]

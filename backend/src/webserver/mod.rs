@@ -134,8 +134,7 @@ async fn create_record(
     info!("Received record with Schema ID: {}", schema_id);
 
     // Store in Cache using provided key
-    state.cache.insert(key.clone(), body.to_vec());
-    state.cache_size.inc();
+    state.cache.insert(key.clone(), body.to_vec()).await?;
 
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": key }))))
 }
@@ -148,8 +147,7 @@ async fn delete_record(
     Path(account_id): Path<String>,
 ) -> Result<impl IntoResponse, MyError> {
     // TODO: Create an option on this api to allow soft deletes by deleting from cache or hard deletes by sending a tombstone message to kafka
-    if let Some((_, customer)) = state.cache.remove(&account_id) {
-        state.cache_size.dec();
+    if let Some(customer) = state.cache.remove(&account_id).await? {
         return Ok((StatusCode::OK, Json(customer)));
     }
     Err(MyError::NotFound("User not found".into()))
@@ -164,9 +162,8 @@ async fn list_records(
 ) -> Result<impl IntoResponse, MyError> {
     let mut keys: Vec<String> = state
         .cache
-        .iter()
-        .map(|entry| entry.key().clone())
-        .collect();
+        .keys()
+        .await?;
 
     // Filter
     if let Some(filter) = &params.filter {
@@ -198,13 +195,12 @@ async fn get_record(
     use std::io::Cursor;
 
     // Get payload from cache
-    let payload_entry = state.cache.get(&account_id).ok_or_else(|| {
+    let payload_bytes = state.cache.get(&account_id).await?.ok_or_else(|| {
         state.requests_miss.inc();
         MyError::NotFound("User not found in dynamic cache".into())
     })?;
 
-    let payload_bytes = payload_entry.value();
-    let bytes_result = get_bytes_result(Some(payload_bytes));
+    let bytes_result = get_bytes_result(Some(&payload_bytes));
 
     // Extract schema ID and data from Confluent Wire Format
     let (msg_id, data) = match bytes_result {
@@ -367,6 +363,7 @@ mod tests {
                 timeout: std::time::Duration::from_millis(100),
                 enabled: false,
             },
+            cache: crate::config::CacheConfig::InMemory,
         };
 
         let state = MyState::new(&config).await.unwrap();
@@ -416,7 +413,7 @@ mod tests {
         let id_str = resp_json["id"].as_str().unwrap();
 
         assert_eq!(id_str, custom_key);
-        assert!(state.cache.contains_key(custom_key));
+        assert!(state.cache.contains_key(custom_key).await.unwrap());
     }
 
     #[tokio::test]
@@ -432,7 +429,9 @@ mod tests {
         };
         state
             .cache
-            .insert("to_delete".to_string(), serialize_customer(&customer));
+            .insert("to_delete".to_string(), serialize_customer(&customer))
+            .await
+            .unwrap();
 
         let app = Router::new()
             .route("/{account_id}", delete(delete_record))
@@ -450,7 +449,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(!state.cache.contains_key("to_delete"));
+        assert!(!state.cache.contains_key("to_delete").await.unwrap());
     }
 
     #[tokio::test]
@@ -487,7 +486,7 @@ mod tests {
                 createdAt: 0,
                 updatedAt: 0,
             }),
-        );
+        ).await.unwrap();
         state.cache.insert(
             "user2".to_string(),
             serialize_customer(&Customer {
@@ -498,7 +497,7 @@ mod tests {
                 createdAt: 0,
                 updatedAt: 0,
             }),
-        );
+        ).await.unwrap();
 
         let app = Router::new()
             .route("/", get(list_records))
@@ -534,7 +533,7 @@ mod tests {
                     createdAt: 0,
                     updatedAt: 0,
                 }),
-            );
+            ).await.unwrap();
         }
 
         let app = Router::new()
@@ -574,7 +573,7 @@ mod tests {
                 createdAt: 0,
                 updatedAt: 0,
             }),
-        );
+        ).await.unwrap();
         state.cache.insert(
             "banana".to_string(),
             serialize_customer(&Customer {
@@ -585,7 +584,7 @@ mod tests {
                 createdAt: 0,
                 updatedAt: 0,
             }),
-        );
+        ).await.unwrap();
         state.cache.insert(
             "apricot".to_string(),
             serialize_customer(&Customer {
@@ -596,7 +595,7 @@ mod tests {
                 createdAt: 0,
                 updatedAt: 0,
             }),
-        );
+        ).await.unwrap();
 
         let app = Router::new()
             .route("/", get(list_records))
@@ -646,7 +645,9 @@ mod tests {
         };
         state
             .cache
-            .insert("123".to_string(), serialize_customer(&customer));
+            .insert("123".to_string(), serialize_customer(&customer))
+            .await
+            .unwrap();
 
         let app = Router::new()
             .route("/{account_id}", get(get_record))
@@ -708,7 +709,7 @@ mod tests {
         encoded.extend_from_slice(&schema_id.to_be_bytes());
         encoded.extend(body);
 
-        state.cache.insert("dyn_user".to_string(), encoded);
+        state.cache.insert("dyn_user".to_string(), encoded).await.unwrap();
 
         // Pre-populate schema cache to avoid network call
         state.schema_cache.insert(schema_id, schema);

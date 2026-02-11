@@ -18,7 +18,15 @@ use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use crate::{MyState, error::MyError};
+use std::sync::Arc;
+
+use crate::{cache::Cache, error::MyError, MyState};
+
+#[derive(Clone)]
+pub struct RouteState {
+    pub global: MyState,
+    pub store: Arc<dyn Cache + Send + Sync>,
+}
 
 #[derive(Deserialize)]
 struct ListUsersParams {
@@ -57,14 +65,43 @@ where
 pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), MyError> {
     let metric_layer = PrometheusMetricLayer::new();
 
-    let path = state.config.webservice.address.path();
+    let base_path = state.config.webservice.address.path();
+    let mut app = Router::new();
 
-    let dynamic_app = Router::new()
-        .route("/", get(list_records))
-        .route(
-            "/{account_id}",
-            get(get_record).delete(delete_record).post(create_record),
-        )
+    for route_def in &state.routes {
+        if let Some(store) = state.stores.get(&route_def.store) {
+            let route_state = RouteState {
+                global: state.clone(),
+                store: store.clone(),
+            };
+
+            let router = Router::new()
+                .route("/", get(list_records))
+                .route(
+                    "/{account_id}",
+                    get(get_record).delete(delete_record).post(create_record),
+                )
+                .with_state(route_state);
+
+            let full_path = format!("{}{}", base_path, route_def.path).replace("//", "/");
+            let full_path = if full_path.starts_with('/') {
+                full_path
+            } else {
+                format!("/{}", full_path)
+            };
+
+            app = app.nest(&full_path, router);
+            info!("Mounted route {} to store {}", full_path, route_def.store);
+        } else {
+            tracing::error!(
+                "Store {} not found for route {}",
+                route_def.store,
+                route_def.path
+            );
+        }
+    }
+
+    let prefix_app = app
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &axum::http::Request<_>| {
@@ -84,10 +121,7 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
                 .on_response(DefaultOnResponse::new().level(Level::DEBUG))
                 .on_failure(DefaultOnFailure::new().level(Level::ERROR)),
         )
-        .layer(metric_layer)
-        .with_state(state.clone());
-
-    let prefix_app = Router::new().nest(path, dynamic_app);
+        .layer(metric_layer);
 
     // run our app with hyper, listening globally on port 3000
     let host = state
@@ -115,7 +149,7 @@ use axum::body::Bytes;
 /// input: Raw bytes containing Confluent Wire Format (Magic Byte + Schema ID + Data)
 /// Returns 201 Created with the key.
 async fn create_record(
-    State(state): State<MyState>,
+    State(state): State<RouteState>,
     Path(key): Path<String>,
     body: Bytes,
 ) -> Result<impl IntoResponse, MyError> {
@@ -134,7 +168,7 @@ async fn create_record(
     info!("Received record with Schema ID: {}", schema_id);
 
     // Store in Cache using provided key
-    state.cache.insert(key.clone(), body.to_vec()).await?;
+    state.store.insert(key.clone(), body.to_vec()).await?;
 
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": key }))))
 }
@@ -143,11 +177,11 @@ async fn create_record(
 /// Deletes a customer by their Account ID.
 /// Returns 200 OK with the deleted customer data, or 404 Not Found.
 async fn delete_record(
-    State(state): State<MyState>,
+    State(state): State<RouteState>,
     Path(account_id): Path<String>,
 ) -> Result<impl IntoResponse, MyError> {
     // TODO: Create an option on this api to allow soft deletes by deleting from cache or hard deletes by sending a tombstone message to kafka
-    if let Some(customer) = state.cache.remove(&account_id).await? {
+    if let Some(customer) = state.store.remove(&account_id).await? {
         return Ok((StatusCode::OK, Json(customer)));
     }
     Err(MyError::NotFound("User not found".into()))
@@ -157,13 +191,10 @@ async fn delete_record(
 /// Lists customer keys with optional filtering and pagination.
 /// Returns 200 OK with a list of account IDs.
 async fn list_records(
-    State(state): State<MyState>,
+    State(state): State<RouteState>,
     Query(params): Query<ListUsersParams>,
 ) -> Result<impl IntoResponse, MyError> {
-    let mut keys: Vec<String> = state
-        .cache
-        .keys()
-        .await?;
+    let mut keys: Vec<String> = state.store.keys().await?;
 
     // Filter
     if let Some(filter) = &params.filter {
@@ -186,7 +217,7 @@ async fn list_records(
 /// Retrieves a customer by their Account ID from the dynamic cache.
 /// Returns 200 OK with the customer data as JSON if found, or 404 Not Found.
 async fn get_record(
-    State(state): State<MyState>,
+    State(state): State<RouteState>,
     Path(account_id): Path<String>,
 ) -> Result<impl IntoResponse, MyError> {
     use apache_avro::from_avro_datum;
@@ -195,8 +226,8 @@ async fn get_record(
     use std::io::Cursor;
 
     // Get payload from cache
-    let payload_bytes = state.cache.get(&account_id).await?.ok_or_else(|| {
-        state.requests_miss.inc();
+    let payload_bytes = state.store.get(&account_id).await?.ok_or_else(|| {
+        state.global.requests_miss.inc();
         MyError::NotFound("User not found in dynamic cache".into())
     })?;
 
@@ -210,6 +241,7 @@ async fn get_record(
 
     // Get schema from cache or error if it does not exist (should never happen as schemas are cached on population)
     let schema = state
+        .global
         .schema_cache
         .get(&msg_id)
         .ok_or_else(|| MyError::NotFound("Schema not found in cache".into()))?;
@@ -222,7 +254,7 @@ async fn get_record(
 
     // Build response with cache headers
     let mut headers = HeaderMap::new();
-    let max_age = state.config.kafka.cache_max_age;
+    let max_age = state.global.config.kafka.cache_max_age;
     headers.insert(
         "Cache-Control",
         format!("public, max-age={}", max_age.as_secs()).parse()?,
@@ -363,7 +395,17 @@ mod tests {
                 timeout: std::time::Duration::from_millis(100),
                 enabled: false,
             },
-            cache: crate::config::CacheConfig::InMemory,
+            cache: crate::config::CacheConfig {
+                stores: vec![crate::config::StoreDefinition {
+                    name: "test_store".to_string(),
+                    store_type: crate::config::StoreType::InMemory,
+                }],
+                routes: vec![crate::config::RouteDefinition {
+                    path: "/test".to_string(),
+                    store: "test_store".to_string(),
+                    schemas: vec![],
+                }],
+            },
         };
 
         let state = MyState::new(&config).await.unwrap();
@@ -377,10 +419,15 @@ mod tests {
     #[tokio::test]
     async fn test_create_record_success() {
         let state = get_test_state().await;
+        let store = state.stores.get("test_store").unwrap().clone();
+        let route_state = RouteState {
+            global: state.clone(),
+            store: store.clone(),
+        };
 
         let app = Router::new()
             .route("/{account_id}", post(create_record))
-            .with_state(state.clone());
+            .with_state(route_state);
 
         let customer = Customer {
             accountId: "new_user".to_string(),
@@ -413,12 +460,13 @@ mod tests {
         let id_str = resp_json["id"].as_str().unwrap();
 
         assert_eq!(id_str, custom_key);
-        assert!(state.cache.contains_key(custom_key).await.unwrap());
+        assert!(store.contains_key(custom_key).await.unwrap());
     }
 
     #[tokio::test]
     async fn test_delete_user_success() {
         let state = get_test_state().await;
+        let store = state.stores.get("test_store").unwrap().clone();
         let customer = Customer {
             accountId: "to_delete".to_string(),
             name: "Delete Me".to_string(),
@@ -427,15 +475,18 @@ mod tests {
             createdAt: 100,
             updatedAt: 200,
         };
-        state
-            .cache
+        store
             .insert("to_delete".to_string(), serialize_customer(&customer))
             .await
             .unwrap();
 
+        let route_state = RouteState {
+            global: state.clone(),
+            store: store.clone(),
+        };
         let app = Router::new()
             .route("/{account_id}", delete(delete_record))
-            .with_state(state.clone());
+            .with_state(route_state);
 
         let response = app
             .oneshot(
@@ -449,15 +500,20 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(!state.cache.contains_key("to_delete").await.unwrap());
+        assert!(!store.contains_key("to_delete").await.unwrap());
     }
 
     #[tokio::test]
     async fn test_delete_user_not_found() {
         let state = get_test_state().await;
+        let store = state.stores.get("test_store").unwrap().clone();
+        let route_state = RouteState {
+            global: state.clone(),
+            store: store.clone(),
+        };
         let app = Router::new()
             .route("/{account_id}", delete(delete_record))
-            .with_state(state.clone());
+            .with_state(route_state);
 
         let response = app
             .oneshot(
@@ -476,32 +532,43 @@ mod tests {
     #[tokio::test]
     async fn test_list_records() {
         let state = get_test_state().await;
-        state.cache.insert(
-            "user1".to_string(),
-            serialize_customer(&Customer {
-                accountId: "user1".to_string(),
-                name: "User 1".to_string(),
-                address: "A".to_string(),
-                phone: "1".to_string(),
-                createdAt: 0,
-                updatedAt: 0,
-            }),
-        ).await.unwrap();
-        state.cache.insert(
-            "user2".to_string(),
-            serialize_customer(&Customer {
-                accountId: "user2".to_string(),
-                name: "User 2".to_string(),
-                address: "A".to_string(),
-                phone: "1".to_string(),
-                createdAt: 0,
-                updatedAt: 0,
-            }),
-        ).await.unwrap();
+        let store = state.stores.get("test_store").unwrap().clone();
+        store
+            .insert(
+                "user1".to_string(),
+                serialize_customer(&Customer {
+                    accountId: "user1".to_string(),
+                    name: "User 1".to_string(),
+                    address: "A".to_string(),
+                    phone: "1".to_string(),
+                    createdAt: 0,
+                    updatedAt: 0,
+                }),
+            )
+            .await
+            .unwrap();
+        store
+            .insert(
+                "user2".to_string(),
+                serialize_customer(&Customer {
+                    accountId: "user2".to_string(),
+                    name: "User 2".to_string(),
+                    address: "A".to_string(),
+                    phone: "1".to_string(),
+                    createdAt: 0,
+                    updatedAt: 0,
+                }),
+            )
+            .await
+            .unwrap();
 
+        let route_state = RouteState {
+            global: state.clone(),
+            store: store.clone(),
+        };
         let app = Router::new()
             .route("/", get(list_records))
-            .with_state(state.clone());
+            .with_state(route_state);
 
         let response = app
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
@@ -521,24 +588,32 @@ mod tests {
     #[tokio::test]
     async fn test_list_users_pagination() {
         let state = get_test_state().await;
+        let store = state.stores.get("test_store").unwrap().clone();
         for i in 0..5 {
             let id = format!("user{i}");
-            state.cache.insert(
-                id.clone(),
-                serialize_customer(&Customer {
-                    accountId: id,
-                    name: "U".to_string(),
-                    address: "A".to_string(),
-                    phone: "1".to_string(),
-                    createdAt: 0,
-                    updatedAt: 0,
-                }),
-            ).await.unwrap();
+            store
+                .insert(
+                    id.clone(),
+                    serialize_customer(&Customer {
+                        accountId: id,
+                        name: "U".to_string(),
+                        address: "A".to_string(),
+                        phone: "1".to_string(),
+                        createdAt: 0,
+                        updatedAt: 0,
+                    }),
+                )
+                .await
+                .unwrap();
         }
 
+        let route_state = RouteState {
+            global: state.clone(),
+            store: store.clone(),
+        };
         let app = Router::new()
             .route("/", get(list_records))
-            .with_state(state.clone());
+            .with_state(route_state);
 
         // Limit 2, Offset 1 -> user1, user2 (user0, user1, user2, user3, user4 sorted)
         let response = app
@@ -563,43 +638,57 @@ mod tests {
     #[tokio::test]
     async fn test_list_users_filter() {
         let state = get_test_state().await;
-        state.cache.insert(
-            "apple".to_string(),
-            serialize_customer(&Customer {
-                accountId: "apple".to_string(),
-                name: "".to_string(),
-                address: "".to_string(),
-                phone: "".to_string(),
-                createdAt: 0,
-                updatedAt: 0,
-            }),
-        ).await.unwrap();
-        state.cache.insert(
-            "banana".to_string(),
-            serialize_customer(&Customer {
-                accountId: "banana".to_string(),
-                name: "".to_string(),
-                address: "".to_string(),
-                phone: "".to_string(),
-                createdAt: 0,
-                updatedAt: 0,
-            }),
-        ).await.unwrap();
-        state.cache.insert(
-            "apricot".to_string(),
-            serialize_customer(&Customer {
-                accountId: "apricot".to_string(),
-                name: "".to_string(),
-                address: "".to_string(),
-                phone: "".to_string(),
-                createdAt: 0,
-                updatedAt: 0,
-            }),
-        ).await.unwrap();
+        let store = state.stores.get("test_store").unwrap().clone();
+        store
+            .insert(
+                "apple".to_string(),
+                serialize_customer(&Customer {
+                    accountId: "apple".to_string(),
+                    name: "".to_string(),
+                    address: "".to_string(),
+                    phone: "".to_string(),
+                    createdAt: 0,
+                    updatedAt: 0,
+                }),
+            )
+            .await
+            .unwrap();
+        store
+            .insert(
+                "banana".to_string(),
+                serialize_customer(&Customer {
+                    accountId: "banana".to_string(),
+                    name: "".to_string(),
+                    address: "".to_string(),
+                    phone: "".to_string(),
+                    createdAt: 0,
+                    updatedAt: 0,
+                }),
+            )
+            .await
+            .unwrap();
+        store
+            .insert(
+                "apricot".to_string(),
+                serialize_customer(&Customer {
+                    accountId: "apricot".to_string(),
+                    name: "".to_string(),
+                    address: "".to_string(),
+                    phone: "".to_string(),
+                    createdAt: 0,
+                    updatedAt: 0,
+                }),
+            )
+            .await
+            .unwrap();
 
+        let route_state = RouteState {
+            global: state.clone(),
+            store: store.clone(),
+        };
         let app = Router::new()
             .route("/", get(list_records))
-            .with_state(state.clone());
+            .with_state(route_state);
 
         let response = app
             .oneshot(
@@ -633,6 +722,7 @@ mod tests {
         // Given `get_record` returns `Json(json_value)`, let's adapt it to use `get_record`.
 
         let state = get_test_state().await;
+        let store = state.stores.get("test_store").unwrap().clone();
 
         // Populate cache
         let customer = Customer {
@@ -643,15 +733,18 @@ mod tests {
             createdAt: 100,
             updatedAt: 200,
         };
-        state
-            .cache
+        store
             .insert("123".to_string(), serialize_customer(&customer))
             .await
             .unwrap();
 
+        let route_state = RouteState {
+            global: state.clone(),
+            store: store.clone(),
+        };
         let app = Router::new()
             .route("/{account_id}", get(get_record))
-            .with_state(state);
+            .with_state(route_state);
 
         let response = app
             .oneshot(Request::builder().uri("/123").body(Body::empty()).unwrap())
@@ -672,10 +765,15 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_not_found() {
         let state = get_test_state().await;
+        let store = state.stores.get("test_store").unwrap().clone();
+        let route_state = RouteState {
+            global: state.clone(),
+            store: store.clone(),
+        };
 
         let app = Router::new()
             .route("/{account_id}", get(get_record))
-            .with_state(state);
+            .with_state(route_state);
 
         let response = app
             .oneshot(Request::builder().uri("/999").body(Body::empty()).unwrap())
@@ -689,6 +787,7 @@ mod tests {
         use apache_avro::{AvroSchema, to_avro_datum, to_value};
 
         let state = get_test_state().await;
+        let store = state.stores.get("test_store").unwrap().clone();
 
         let customer = Customer {
             accountId: "dyn_user".to_string(),
@@ -709,7 +808,10 @@ mod tests {
         encoded.extend_from_slice(&schema_id.to_be_bytes());
         encoded.extend(body);
 
-        state.cache.insert("dyn_user".to_string(), encoded).await.unwrap();
+        store
+            .insert("dyn_user".to_string(), encoded)
+            .await
+            .unwrap();
 
         // Pre-populate schema cache to avoid network call
         state.schema_cache.insert(schema_id, schema);
@@ -722,9 +824,13 @@ mod tests {
         // The previous tests test the `app` constructed manually.
         // `test_get_user_found` constructs `Router::new().route...`
 
+        let route_state = RouteState {
+            global: state.clone(),
+            store: store.clone(),
+        };
         let app = Router::new()
             .route("/{account_id}", get(get_record))
-            .with_state(state.clone());
+            .with_state(route_state);
 
         let response = app
             .oneshot(

@@ -1,5 +1,6 @@
 use crate::kafka_utils::get_broker_string;
 
+use apache_avro::Schema;
 use futures::TryStreamExt;
 use rdkafka::Message;
 use rdkafka::Offset;
@@ -107,22 +108,7 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
     let kafka_config = &state.config.kafka;
     info!("Starting Kafka Consumer for topic: {}", kafka_config.topic);
 
-    let group_id = match state.config.cache {
-        crate::config::CacheConfig::Redis(_) => {
-            // Persistent consumer group
-            kafka_config.group_id.clone()
-        },
-        crate::config::CacheConfig::InMemory => {
-            // Ephemeral consumer group per pod
-            std::env::var("HOSTNAME").unwrap_or_else(|_| {
-                warn!(
-                    "Failed to get hostname, using default group id {}",
-                    kafka_config.group_id
-                );
-                kafka_config.group_id.clone()
-            })
-        }
-    };
+    let group_id = kafka_config.group_id.clone();
     info!("Consumer group id: {group_id}");
 
     let context = ConsumerStatsContext {
@@ -184,14 +170,36 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
                         }
 
                         // Update dynamic cache with FULL payload
-                        if let Some(key_bytes) = borrowed_message.key() {
-                            if let Ok(key_str) = std::str::from_utf8(key_bytes) {
-                                if let Some(full_payload) = borrowed_message.payload() {
-                                    state
-                                        .cache
-                                        .insert(key_str.to_string(), full_payload.to_vec())
-                                        .await?;
+                        if let Some(schema_ref) = state.schema_cache.get(&msg_id) {
+                            let schema = schema_ref.value();
+                            let full_name = match schema {
+                                Schema::Record(r) => r.name.fullname(None),
+                                _ => {
+                                    warn!("Schema {} is not a Record", msg_id);
+                                    String::new()
                                 }
+                            };
+
+                            if let Some(store_name) = state.schema_to_store.get(&full_name) {
+                                if let Some(store) = state.stores.get(store_name) {
+                                    if let Some(key_bytes) = borrowed_message.key() {
+                                        if let Ok(key_str) = std::str::from_utf8(key_bytes) {
+                                            if let Some(full_payload) = borrowed_message.payload() {
+                                                store
+                                                    .insert(key_str.to_string(), full_payload.to_vec())
+                                                    .await?;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    error!(
+                                        "Store {} configured for schema {} but not found in stores map",
+                                        store_name, full_name
+                                    );
+                                }
+                            } else {
+                                warn!("No store routed for schema {}", full_name);
+                                state.schema_unrouted_count.inc();
                             }
                         }
                     } else {
@@ -207,7 +215,9 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
                     if let Some(key_bytes) = borrowed_message.key() {
                         if let Ok(key_str) = std::str::from_utf8(key_bytes) {
                             state.tombstones_processed.inc();
-                            state.cache.remove(key_str).await?;
+                            for store in state.stores.values() {
+                                store.remove(key_str).await?;
+                            }
                             info!("Removed record for key: {}", key_str);
                         }
                     } else {

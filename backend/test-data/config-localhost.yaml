@@ -29,3 +29,8 @@ startup_checks:
   fails: 2
   timeout: 5s
   enabled: true
+cache:
+  type: in_memory
+# cache:
+#   type: redis
+#   url: redis://localhost:6379

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     ffi::c_void,
     sync::{Arc, atomic::AtomicBool},
 };
@@ -41,7 +42,9 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Clone)]
 pub struct MyState {
     config: MyConfig,
-    pub cache: Arc<dyn Cache + Send + Sync>,
+    pub stores: Arc<HashMap<String, Arc<dyn Cache + Send + Sync>>>,
+    pub routes: Vec<crate::config::RouteDefinition>,
+    pub schema_to_store: Arc<HashMap<String, String>>,
     pub schema_cache: Arc<DashMap<u32, Schema>>,
     // Metrics
     pub requests_total: Box<IntCounter>,
@@ -49,6 +52,7 @@ pub struct MyState {
     pub updates_received: Box<IntCounter>,
     pub tombstones_processed: Box<IntCounter>,
     pub schema_mismatch_count: Box<IntCounter>,
+    pub schema_unrouted_count: Box<IntCounter>,
     pub cache_size: Box<IntGauge>,
     pub consumer_lag: Box<IntGauge>,
     pub startup_lag_cleared: Arc<AtomicBool>,
@@ -73,6 +77,10 @@ impl MyState {
             "schema_mismatch_count",
             "Total messages with schema mismatch",
         )?;
+        let schema_unrouted_count = IntCounter::new(
+            "schema_unrouted_count",
+            "Total messages where schema was not routed to any store",
+        )?;
         let cache_size = IntGauge::new("push_cache_records_total", "Total records in cache")?;
         let consumer_lag =
             IntGauge::new("push_cache_consumer_lag_total", "Total Kafka consumer lag")?;
@@ -82,6 +90,7 @@ impl MyState {
         registry.register(Box::new(updates_received.clone()))?;
         registry.register(Box::new(tombstones_processed.clone()))?;
         registry.register(Box::new(schema_mismatch_count.clone()))?;
+        registry.register(Box::new(schema_unrouted_count.clone()))?;
         registry.register(Box::new(cache_size.clone()))?;
         registry.register(Box::new(consumer_lag.clone()))?;
 
@@ -100,18 +109,31 @@ impl MyState {
             run_startup_checks(config).await?;
         }
 
-        let cache: Arc<dyn Cache + Send + Sync> = match &config.cache {
-            crate::config::CacheConfig::InMemory => {
-                 Arc::new(InMemoryCache::new(Box::new(cache_size.clone())))
-            },
-            crate::config::CacheConfig::Redis(redis_config) => {
-                 Arc::new(RedisCache::new(redis_config).await?)
+        let mut stores = HashMap::new();
+        for store_def in &config.cache.stores {
+            let cache: Arc<dyn Cache + Send + Sync> = match &store_def.store_type {
+                crate::config::StoreType::InMemory => {
+                    Arc::new(InMemoryCache::new(Box::new(cache_size.clone())))
+                },
+                crate::config::StoreType::Redis(redis_config) => {
+                    Arc::new(RedisCache::new(redis_config).await?)
+                }
+            };
+            stores.insert(store_def.name.clone(), cache);
+        }
+
+        let mut schema_to_store = HashMap::new();
+        for route in &config.cache.routes {
+            for schema in &route.schemas {
+                schema_to_store.insert(schema.clone(), route.store.clone());
             }
-        };
+        }
 
         Ok(MyState {
             config: config.clone(),
-            cache,
+            stores: Arc::new(stores),
+            routes: config.cache.routes.clone(),
+            schema_to_store: Arc::new(schema_to_store),
             schema_cache: Arc::new(DashMap::new()),
 
             startup_lag_cleared: Arc::new(AtomicBool::new(false)),
@@ -121,6 +143,7 @@ impl MyState {
             updates_received: Box::new(updates_received),
             tombstones_processed: Box::new(tombstones_processed),
             schema_mismatch_count: Box::new(schema_mismatch_count),
+            schema_unrouted_count: Box::new(schema_unrouted_count),
             cache_size: Box::new(cache_size),
             consumer_lag: Box::new(consumer_lag),
 
@@ -214,7 +237,10 @@ mod tests {
             enabled: false,
         };
 
-        let result = run_check("test_check", &config, || async { Ok::<u32, MyError>(42) }).await;
+        let result = run_check("test_check".to_string(), &config, || async {
+            Ok::<u32, MyError>(42)
+        })
+        .await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
@@ -231,7 +257,7 @@ mod tests {
         let counter = Arc::new(Mutex::new(0));
         let counter_clone = counter.clone();
 
-        let result = run_check("test_check_retry", &config, || {
+        let result = run_check("test_check_retry".to_string(), &config, || {
             let counter = counter_clone.clone();
             async move {
                 let mut c = counter.lock().unwrap();
@@ -261,7 +287,7 @@ mod tests {
         let counter = Arc::new(Mutex::new(0));
         let counter_clone = counter.clone();
 
-        let result: Result<u32, MyError> = run_check("test_check_fail", &config, || {
+        let result: Result<u32, MyError> = run_check("test_check_fail".to_string(), &config, || {
             let counter = counter_clone.clone();
             async move {
                 let mut c = counter.lock().unwrap();

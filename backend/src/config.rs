@@ -70,7 +70,13 @@
 //!   timeout: 5s
 //!   enabled: true
 //! cache:
-//!   type: in_memory
+//!   stores:
+//!     - name: "mem"
+//!       type: "in_memory"
+//!   routes:
+//!     - path: "/users"
+//!       store: "mem"
+//!       schemas: []
 //! "#;
 //!
 //! let secrets_path = "/path/to/secrets";
@@ -128,10 +134,30 @@ pub struct MyConfig {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+pub struct CacheConfig {
+    pub stores: Vec<StoreDefinition>,
+    pub routes: Vec<RouteDefinition>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct StoreDefinition {
+    pub name: String,
+    #[serde(flatten)]
+    pub store_type: StoreType,
+}
+
+#[derive(Deserialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum CacheConfig {
+pub enum StoreType {
     InMemory,
     Redis(RedisConfig),
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct RouteDefinition {
+    pub path: String,
+    pub store: String,
+    pub schemas: Vec<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]

@@ -88,6 +88,15 @@ start-kafka:
 start-schema:
 	$(SCHEMA_REGISTRY_START) $(CONFLUENT_HOME)/etc/schema-registry/schema-registry.properties
 
+redis-compose:
+	docker compose -f docker-services/docker-compose-redis.yaml up
+
+kafka-compose-zk:
+	docker compose -f docker-services/docker-compose-kafka-zk.yaml up
+
+kafka-compose-kraft:
+	docker compose -f docker-services/docker-compose-kafka-kraft.yaml up
+
 ################################################################################
 # Kafka Utilities
 ################################################################################

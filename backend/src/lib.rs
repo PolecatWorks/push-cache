@@ -20,11 +20,11 @@ use crate::{
 
 use metrics::{prometheus_response_free, prometheus_response_mystate};
 
-use crate::startup_tools::run_startup_checks;
 use crate::cache::{Cache, InMemoryCache, RedisCache};
+use crate::startup_tools::run_startup_checks;
 
-pub mod config;
 pub mod cache;
+pub mod config;
 pub mod consumer;
 pub mod error;
 pub mod hams;
@@ -114,7 +114,7 @@ impl MyState {
             let cache: Arc<dyn Cache + Send + Sync> = match &store_def.store_type {
                 crate::config::StoreType::InMemory => {
                     Arc::new(InMemoryCache::new(Box::new(cache_size.clone())))
-                },
+                }
                 crate::config::StoreType::Redis(redis_config) => {
                     Arc::new(RedisCache::new(redis_config).await?)
                 }
@@ -123,9 +123,11 @@ impl MyState {
         }
 
         let mut schema_to_store = HashMap::new();
-        for route in &config.cache.routes {
-            for schema in &route.schemas {
-                schema_to_store.insert(schema.clone(), route.store.clone());
+        for store_def in &config.cache.stores {
+            if let Some(schemas) = &store_def.schemas {
+                for schema in schemas {
+                    schema_to_store.insert(schema.clone(), store_def.name.clone());
+                }
             }
         }
 
@@ -287,15 +289,16 @@ mod tests {
         let counter = Arc::new(Mutex::new(0));
         let counter_clone = counter.clone();
 
-        let result: Result<u32, MyError> = run_check("test_check_fail".to_string(), &config, || {
-            let counter = counter_clone.clone();
-            async move {
-                let mut c = counter.lock().unwrap();
-                *c += 1;
-                Err(MyError::Message("always fail".to_string()))
-            }
-        })
-        .await;
+        let result: Result<u32, MyError> =
+            run_check("test_check_fail".to_string(), &config, || {
+                let counter = counter_clone.clone();
+                async move {
+                    let mut c = counter.lock().unwrap();
+                    *c += 1;
+                    Err(MyError::Message("always fail".to_string()))
+                }
+            })
+            .await;
 
         assert!(result.is_err());
         assert_eq!(*counter.lock().unwrap(), 3);

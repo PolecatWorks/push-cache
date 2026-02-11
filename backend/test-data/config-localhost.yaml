@@ -30,7 +30,14 @@ startup_checks:
   timeout: 5s
   enabled: true
 cache:
-  type: in_memory
+  stores:
+    - name: mem
+      type: in_memory
+      schemas:
+        - com.polecatworks.billing.Customer
+  routes:
+    - path: /users
+      store: mem
 # cache:
 #   type: redis
 #   url: redis://localhost:6379

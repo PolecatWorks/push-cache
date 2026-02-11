@@ -73,10 +73,10 @@
 //!   stores:
 //!     - name: "mem"
 //!       type: "in_memory"
+//!       schemas: []
 //!   routes:
 //!     - path: "/users"
 //!       store: "mem"
-//!       schemas: []
 //! "#;
 //!
 //! let secrets_path = "/path/to/secrets";
@@ -144,6 +144,7 @@ pub struct StoreDefinition {
     pub name: String,
     #[serde(flatten)]
     pub store_type: StoreType,
+    pub schemas: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -157,7 +158,6 @@ pub enum StoreType {
 pub struct RouteDefinition {
     pub path: String,
     pub store: String,
-    pub schemas: Vec<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]

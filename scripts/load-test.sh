@@ -4,7 +4,8 @@ set -e
 # Configuration
 DURATION="30s"
 CONCURRENCY=100
-BASE_URL="http://localhost:8080"
+BASE_URL="http://localhost:8080/cache/users"
+
 
 # 0. Ensure local cargo bin is in PATH
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -28,10 +29,10 @@ echo "Fetching a valid ID from $BASE_URL/..."
 # Fetch the list of keys (assumes JSON array of strings: ["key1", "key2", ...])
 # We use python3 to parse because jq might not be available, matching the constraint of minimal dependencies if possible,
 # but python3 is standard on mac.
-KEYS_JSON=$(curl -s "$BASE_URL/")
+KEYS_JSON=$(curl -s "$BASE_URL")
 
 if [ -z "$KEYS_JSON" ]; then
-    echo "Failed to fetch keys from $BASE_URL/. Is the server running?"
+    echo "Failed to fetch keys from $BASE_URL. Is the server running?"
     exit 1
 fi
 
@@ -46,9 +47,9 @@ fi
 echo "Found Key: $TARGET_KEY"
 
 # 3. Run Load Test
-echo "Running Load Test against $BASE_URL/cache/$TARGET_KEY"
+echo "Running Load Test against $BASE_URL/$TARGET_KEY"
 echo "Concurrency: $CONCURRENCY, Duration: $DURATION"
 
-oha -c $CONCURRENCY -z $DURATION "$BASE_URL/cache/$TARGET_KEY"
+oha -c $CONCURRENCY -z $DURATION "$BASE_URL/$TARGET_KEY"
 
 echo "Load Test Complete."

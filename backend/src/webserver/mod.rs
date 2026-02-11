@@ -20,7 +20,7 @@ use url::Url;
 
 use std::sync::Arc;
 
-use crate::{cache::Cache, error::MyError, MyState};
+use crate::{MyState, cache::Cache, error::MyError};
 
 #[derive(Clone)]
 pub struct RouteState {
@@ -399,11 +399,11 @@ mod tests {
                 stores: vec![crate::config::StoreDefinition {
                     name: "test_store".to_string(),
                     store_type: crate::config::StoreType::InMemory,
+                    schemas: Some(vec![]),
                 }],
                 routes: vec![crate::config::RouteDefinition {
                     path: "/test".to_string(),
                     store: "test_store".to_string(),
-                    schemas: vec![],
                 }],
             },
         };
@@ -808,10 +808,7 @@ mod tests {
         encoded.extend_from_slice(&schema_id.to_be_bytes());
         encoded.extend(body);
 
-        store
-            .insert("dyn_user".to_string(), encoded)
-            .await
-            .unwrap();
+        store.insert("dyn_user".to_string(), encoded).await.unwrap();
 
         // Pre-populate schema cache to avoid network call
         state.schema_cache.insert(schema_id, schema);

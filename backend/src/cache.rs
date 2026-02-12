@@ -69,7 +69,7 @@ pub struct RedisCache {
 
 impl RedisCache {
     pub async fn new(config: &RedisConfig) -> Result<Self, MyError> {
-        let url: url::Url = config.url.clone().into();
+        let url: url::Url = config.url.clone();
         let client = redis::Client::open(url.as_str())
             .map_err(|e| MyError::Message(format!("Redis connect error: {e}")))?;
 
@@ -135,7 +135,7 @@ impl Cache for RedisCache {
         // Also handling pattern matching
 
         let match_pattern = match &self.prefix {
-            Some(p) => format!("{}:*", p),
+            Some(p) => format!("{p}:*"),
             None => "*".to_string(),
         };
 

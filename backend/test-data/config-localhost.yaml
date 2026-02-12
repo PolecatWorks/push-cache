@@ -31,16 +31,16 @@ startup_checks:
   enabled: true
 cache:
   stores:
-    # - name: customers
-    #   type: redis
-    #   url: redis://localhost:6379
-    #   prefix: customers
-    #   schemas:
-    #     - com.polecatworks.billing.Customer
     - name: customers
-      type: in_memory
+      type: redis
+      url: redis://localhost:6379
+      prefix: customers
       schemas:
         - com.polecatworks.billing.Customer
+    # - name: customers
+    #   type: in_memory
+    #   schemas:
+    #     - com.polecatworks.billing.Customer
   routes:
     - path: /customers
       store: customers

@@ -143,8 +143,8 @@ Configuration is handled via `figment` and can be supplied via a YAML file or en
 | | `topic` | *Required* | Topic name to consume |
 | | `schema_registry_url` | *Required* | URL for Schema Registry |
 | | `cache_max_age_seconds` | `300` | HTTP Cache-Control max-age |
-| **cache** | `type` | *Required* | `in_memory` or `redis` |
-| | `url` | *Required if redis* | Redis connection URL |
+| **cache** | `stores` | *Required* | List of store definitions (in_memory, redis) |
+| | `routes` | *Required* | List of route mappings to stores |
 
 Example `config.yaml`:
 ```yaml
@@ -160,10 +160,18 @@ kafka:
   cache_max_age_seconds: 60
 
 cache:
-  type: in_memory
-  # For Redis:
-  # type: redis
-  # url: "redis://localhost:6379"
+  stores:
+    - name: "mem"
+      type: "in_memory"
+      schemas: [] # Optional: filter specific schemas if needed
+    # - name: "main_redis"
+    #   type: "redis"
+    #   url: "redis://localhost:6379"
+    #   prefix: "cache"
+  routes:
+    - path: "/customers"
+      store: "mem"
+
 ```
 
 ## Data Population
@@ -247,6 +255,22 @@ make populate-help
 - Kafka & Zookeeper (local or remote)
 - Schema Registry
 - `make`
+- Docker & Docker Compose (optional, for running dependencies)
+
+### Docker Compose
+
+You can use Docker Compose to run the necessary infrastructure dependencies (Redis, Kafka, Zookeeper, Schema Registry). The `Makefile` provides convenient shortcuts:
+
+```bash
+# Start Redis
+make compose-redis
+
+# Start Kafka with Zookeeper (Standard)
+make compose-kafka-zk
+
+# Start Kafka in KRaft mode (Experimental/Newer)
+make compose-kafka-kraft
+```
 
 ### Quick Start
 1. **Start dependencies** (in separate terminals or background):

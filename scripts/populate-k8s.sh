@@ -11,7 +11,7 @@ SCRIPT_NAME="populate_kafka"
 # Kafka and Schema Registry Configs (internal K8s DNS)
 BOOTSTRAP_SERVERS="kafka.confluent.svc:9092"
 SCHEMA_REGISTRY="http://schemaregistry.confluent.svc:8081"
-TOPIC="pcache-users"
+TOPIC="pcache-data"
 COUNT=100
 MESSAGE_TYPE="${MESSAGE_TYPE:-customer}"  # Default to customer, override with env var
 

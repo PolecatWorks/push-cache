@@ -64,18 +64,31 @@ impl Cache for InMemoryCache {
 #[derive(Clone)]
 pub struct RedisCache {
     manager: redis::aio::ConnectionManager,
+    prefix: Option<String>,
 }
 
 impl RedisCache {
     pub async fn new(config: &RedisConfig) -> Result<Self, MyError> {
         let url: url::Url = config.url.clone().into();
         let client = redis::Client::open(url.as_str())
-            .map_err(|e| MyError::Message(format!("Redis connect error: {}", e)))?;
+            .map_err(|e| MyError::Message(format!("Redis connect error: {e}")))?;
 
-        let manager = client.get_connection_manager().await
-            .map_err(|e| MyError::Message(format!("Redis connection manager error: {}", e)))?;
+        let manager = client
+            .get_connection_manager()
+            .await
+            .map_err(|e| MyError::Message(format!("Redis connection manager error: {e}")))?;
 
-        Ok(Self { manager })
+        Ok(Self {
+            manager,
+            prefix: config.prefix.clone(),
+        })
+    }
+
+    fn format_key(&self, key: &str) -> String {
+        match &self.prefix {
+            Some(p) => format!("{p}:{key}"),
+            None => key.to_string(),
+        }
     }
 }
 
@@ -83,29 +96,33 @@ impl RedisCache {
 impl Cache for RedisCache {
     async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, MyError> {
         let mut conn = self.manager.clone();
-        conn.get::<_, Option<Vec<u8>>>(key).await
+        let query_key = self.format_key(key);
+        conn.get::<_, Option<Vec<u8>>>(query_key)
+            .await
             .map_err(|e| {
                 error!("Redis get error: {}", e);
-                MyError::Message(format!("Redis get error: {}", e))
+                MyError::Message(format!("Redis get error: {e}"))
             })
     }
 
     async fn insert(&self, key: String, value: Vec<u8>) -> Result<(), MyError> {
         let mut conn = self.manager.clone();
-        conn.set::<_, _, ()>(key, value).await
-            .map_err(|e| {
-                error!("Redis set error: {}", e);
-                MyError::Message(format!("Redis set error: {}", e))
-            })
+        let query_key = self.format_key(&key);
+        conn.set::<_, _, ()>(query_key, value).await.map_err(|e| {
+            error!("Redis set error: {}", e);
+            MyError::Message(format!("Redis set error: {e}"))
+        })
     }
 
     async fn remove(&self, key: &str) -> Result<Option<Vec<u8>>, MyError> {
         let mut conn = self.manager.clone();
+        let query_key = self.format_key(key);
         // Try GETDEL (Redis 6.2+)
-        conn.get_del::<_, Option<Vec<u8>>>(key).await
+        conn.get_del::<_, Option<Vec<u8>>>(query_key)
+            .await
             .map_err(|e| {
                 error!("Redis get_del error: {}", e);
-                MyError::Message(format!("Redis get_del error: {}", e))
+                MyError::Message(format!("Redis get_del error: {e}"))
             })
     }
 
@@ -117,19 +134,37 @@ impl Cache for RedisCache {
         // Note: redis::AsyncIter needs the connection to live long enough
         // Also handling pattern matching
 
-        let mut iter: redis::AsyncIter<String> = conn.scan_match("*").await
-             .map_err(|e| {
-                 error!("Redis scan error: {}", e);
-                 MyError::Message(format!("Redis scan error: {}", e))
-             })?;
+        let match_pattern = match &self.prefix {
+            Some(p) => format!("{}:*", p),
+            None => "*".to_string(),
+        };
+
+        let mut iter: redis::AsyncIter<String> =
+            conn.scan_match(&match_pattern).await.map_err(|e| {
+                error!("Redis scan error: {}", e);
+                MyError::Message(format!("Redis scan error: {e}"))
+            })?;
 
         while let Some(key_result) = iter.next_item().await {
             match key_result {
-                Ok(k) => keys.push(k),
+                Ok(k) => {
+                    if let Some(prefix) = &self.prefix {
+                        if let Some(stripped) = k.strip_prefix(&format!("{prefix}:")) {
+                            keys.push(stripped.to_string());
+                        } else {
+                            // Should match scan pattern, but just in case
+                            keys.push(k);
+                        }
+                    } else {
+                        keys.push(k);
+                    }
+                }
                 Err(e) => {
                     error!("Redis scan error: {}", e);
                     // Return error immediately?
-                    return Err(MyError::Message(format!("Redis scan error during iteration: {}", e)));
+                    return Err(MyError::Message(format!(
+                        "Redis scan error during iteration: {e}"
+                    )));
                 }
             }
         }
@@ -138,10 +173,10 @@ impl Cache for RedisCache {
 
     async fn contains_key(&self, key: &str) -> Result<bool, MyError> {
         let mut conn = self.manager.clone();
-        conn.exists::<_, bool>(key).await
-            .map_err(|e| {
-                error!("Redis exists error: {}", e);
-                MyError::Message(format!("Redis exists error: {}", e))
-            })
+        let query_key = self.format_key(key);
+        conn.exists::<_, bool>(query_key).await.map_err(|e| {
+            error!("Redis exists error: {e}");
+            MyError::Message(format!("Redis exists error: {e}"))
+        })
     }
 }

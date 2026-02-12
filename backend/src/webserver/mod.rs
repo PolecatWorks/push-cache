@@ -87,7 +87,7 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
             let full_path = if full_path.starts_with('/') {
                 full_path
             } else {
-                format!("/{}", full_path)
+                format!("/{full_path}")
             };
 
             app = app.nest(&full_path, router);

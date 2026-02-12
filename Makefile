@@ -88,14 +88,14 @@ start-kafka:
 start-schema:
 	$(SCHEMA_REGISTRY_START) $(CONFLUENT_HOME)/etc/schema-registry/schema-registry.properties
 
-redis-compose:
-	docker compose -f docker-services/docker-compose-redis.yaml up
+compose-redis:
+	docker compose -f docker-compose/redis.yaml up
 
-kafka-compose-zk:
-	docker compose -f docker-services/docker-compose-kafka-zk.yaml up
+compose-kafka-zk:
+	docker compose -f docker-compose/kafka-zk.yaml up
 
-kafka-compose-kraft:
-	docker compose -f docker-services/docker-compose-kafka-kraft.yaml up
+compose-kafka-kraft:
+	docker compose -f docker-compose/kafka-kraft.yaml up
 
 ################################################################################
 # Kafka Utilities
@@ -105,10 +105,10 @@ topics-list:
 	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --list
 
 topics-create:
-	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --create --topic "pcache-users" --partitions 7 --replication-factor 1
+	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --create --topic "pcache-data" --partitions 7 --replication-factor 1
 
 topics-delete:
-	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --delete --topic "pcache-users"
+	$(KAFKA_TOPICS) --bootstrap-server $(KAFKA_BOOTSTRAP) --delete --topic "pcache-data"
 
 topic-describe:
 	@if [ -z "$(TOPIC)" ]; then echo "Usage: make topic-describe TOPIC=<topic_name>"; exit 1; fi
@@ -134,9 +134,9 @@ topic-input-read:
 populate-help:
 	@echo "Available populate targets:"
 	@echo "  populate-customers - Generate 100 customer records (default message type)"
-	@echo "  populate-bills     - Generate 100 billing records to pcache-users topic"
-	@echo "  populate-usage     - Generate 100 usage records to pcache-users topic"
-	@echo "  populate-tickets   - Generate 100 support ticket records to pcache-users topic"
+	@echo "  populate-bills     - Generate 100 billing records to pcache-data topic"
+	@echo "  populate-usage     - Generate 100 usage records to pcache-data topic"
+	@echo "  populate-tickets   - Generate 100 support ticket records to pcache-data topic"
 	@echo ""
 	@echo "Example: make populate-customers"
 	@echo "Note: Ensure Kafka, Zookeeper, and Schema Registry are running first"
@@ -153,7 +153,7 @@ populate-bills:
 		--config test-data/config-localhost.yaml \
 		--secrets test-data/secrets \
 		--message-type bill \
-		--topic pcache-users \
+		--topic pcache-data \
 		--count 100
 
 populate-usage:
@@ -161,7 +161,7 @@ populate-usage:
 		--config test-data/config-localhost.yaml \
 		--secrets test-data/secrets \
 		--message-type usage \
-		--topic pcache-users \
+		--topic pcache-data \
 		--count 100
 
 populate-tickets:
@@ -169,5 +169,5 @@ populate-tickets:
 		--config test-data/config-localhost.yaml \
 		--secrets test-data/secrets \
 		--message-type ticket \
-		--topic pcache-users \
+		--topic pcache-data \
 		--count 100

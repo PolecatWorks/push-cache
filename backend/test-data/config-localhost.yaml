@@ -19,7 +19,7 @@ webservice:
 kafka:
   brokers: kafka://localhost:9092
   group_id: pushcgroup
-  topic: pcache-users
+  topic: pcache-data
   schema_registry_url: http://localhost:8081
   cache_max_age: 300s
   fetch_metadata_timeout: 5s
@@ -31,13 +31,19 @@ startup_checks:
   enabled: true
 cache:
   stores:
-    - name: mem
+    # - name: customers
+    #   type: redis
+    #   url: redis://localhost:6379
+    #   prefix: customers
+    #   schemas:
+    #     - com.polecatworks.billing.Customer
+    - name: customers
       type: in_memory
       schemas:
         - com.polecatworks.billing.Customer
   routes:
-    - path: /users
-      store: mem
+    - path: /customers
+      store: customers
 # cache:
 #   type: redis
 #   url: redis://localhost:6379

@@ -46,7 +46,7 @@ def customer_to_dict(customer, ctx):
 @click.command()
 @click.option('--bootstrap-servers', default="localhost:9092", help="Kafka Bootstrap Servers")
 @click.option('--schema-registry', default="http://localhost:8081", help="Schema Registry URL")
-@click.option('--topic', default="push-cache-users", help="Kafka Topic")
+@click.option('--topic', default="push-cache-customers", help="Kafka Topic")
 @click.option('--count', default=1, help="Number of records to produce")
 def main(bootstrap_servers, schema_registry, topic, count):
     conf = {'bootstrap.servers': bootstrap_servers}

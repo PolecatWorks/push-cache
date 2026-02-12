@@ -37,7 +37,7 @@ spec:
         forwarding_headers: []
       kafka:
         group_id: pushcgroup
-        topic: pcache-users
+        topic: pcache-data
         brokers: kafka://kafka.confluent.svc:9092
         schema_registry_url: http://schemaregistry.confluent.svc:8081
     devsecops:

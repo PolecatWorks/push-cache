@@ -162,7 +162,8 @@ pub struct RouteDefinition {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct RedisConfig {
-    pub url: UrlWithUsernamePassword,
+    pub url: Url,
+    pub prefix: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]

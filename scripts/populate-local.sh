@@ -7,7 +7,7 @@ SECRETS_DIR="backend/test-data/secrets" # Assuming secrets might be here or not 
 
 # Aligned with populate-k8s.sh
 MESSAGE_TYPE="${MESSAGE_TYPE:-customer}"
-TOPIC="${TOPIC:-pcache-users}"
+TOPIC="${TOPIC:-pcache-data}"
 COUNT="${COUNT:-100}"
 
 # 0. Ensure local cargo bin is in PATH

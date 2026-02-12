@@ -9,7 +9,7 @@ secretName: db0-service-cap-user
 configs:
   kafka:
     group_id: pushcgroup
-    topic: pcache-users
+    topic: pcache-data
     brokers: kafka://kafka.confluent.svc:9092
     schema_registry_url: http://schemaregistry.confluent.svc:8081
     offset_reset: earliest

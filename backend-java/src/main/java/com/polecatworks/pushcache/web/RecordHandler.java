@@ -115,12 +115,12 @@ public class RecordHandler {
     }
 
     public ServerResponse getRecord(ServerRequest request) {
-        metricsService.incrementRequestsTotal();
+        metricsService.incrementRequestsTotal(cache.getName());
         String id = request.pathVariable("id");
         byte[] data = cache.get(id);
 
         if (data == null) {
-            metricsService.incrementRequestsMiss();
+            metricsService.incrementRequestsMiss(cache.getName());
             return ServerResponse.status(HttpStatus.NOT_FOUND)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Collections.singletonMap("message", "User not found in dynamic cache"));

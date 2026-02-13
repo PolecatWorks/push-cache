@@ -192,7 +192,7 @@ public class KafkaConsumerService {
                 }
             } else {
                 logger.warn("No store routed for schema {}", fullName);
-                metricsService.incrementSchemaMismatchCount();
+                metricsService.incrementSchemaUnroutedCount();
             }
         } catch (Exception e) {
             logger.error("Failed to process message with schema ID {}", schemaId, e);

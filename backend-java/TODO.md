@@ -28,10 +28,10 @@ Implement multi-store support (Redis + InMemory), schema-based routing for Kafka
     - [x] Build the `schema_to_store` map (Schema Name -> Store Name) from configuration.
     - [x] Build the `path_to_store` map (URL Path -> Store Name) from configuration.
 
-- [ ] **4. Kafka Consumer Routing**
-    - [ ] Update `KafkaConsumerService` to fetch the schema ID and look up the schema name.
-    - [ ] Implement logic to route the message to the specific `Cache` instance based on the schema name.
-    - [ ] Handle Tombstones: Broadcast delete to *all* stores (matching Rust behavior).
+- [x] **4. Kafka Consumer Routing**
+    - [x] Update `KafkaConsumerService` to fetch the schema ID and look up the schema name.
+    - [x] Implement logic to route the message to the specific `Cache` instance based on the schema name.
+    - [x] Handle Tombstones: Broadcast delete to *all* stores (matching Rust behavior).
 
 - [ ] **5. REST API Routing**
     - [ ] Refactor `RecordHandler` (or introduce a `RouterService`) to determine the target store based on the request path (prefix).
@@ -57,3 +57,12 @@ Implement multi-store support (Redis + InMemory), schema-based routing for Kafka
 *   Identify what has changed in the rust system and outline a set of small steps that can be taken one at a time.
 *   Do not execute all steps at once only do a small incremental step.
 *   Write the full set of steps into a todo file inside the backend-java directory and then update it as you progress.
+
+---
+
+## Original Prompt
+I a previous task I gave you the instructions: review the code in the rust design (backend). Identify all the features and compare them with the code in the backend-java.
+
+Of the features identify what has changed in the rust system and outline a set of small steps that can be taken one at a time to update from the current state to having parity with the rust version. Do not execute all steps at once only do a small incremental step. Write the full set of steps into a todo file inside the backend-java directory and then update it as you progress. Also store this prompt in that file as a guideline for future iterations of progress.
+
+Now I want you to pick up the todo and work on the next step

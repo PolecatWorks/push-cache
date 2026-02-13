@@ -22,7 +22,7 @@ public class KafkaConsumerService {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaConsumerService.class);
     private final AppConfig appConfig;
-    private final Cache cache;
+    private final CacheFactory cacheFactory;
     private final Environment environment;
     private final Function<Properties, Consumer<String, byte[]>> consumerFactory;
     private final SchemaService schemaService;
@@ -33,16 +33,16 @@ public class KafkaConsumerService {
     private static final long LAG_CHECK_INTERVAL = 1000;
 
     @Autowired
-    public KafkaConsumerService(AppConfig appConfig, Cache cache, Environment environment,
+    public KafkaConsumerService(AppConfig appConfig, CacheFactory cacheFactory, Environment environment,
             SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator) {
-        this(appConfig, cache, environment, schemaService, metricsService, lagHealthIndicator, KafkaConsumer::new);
+        this(appConfig, cacheFactory, environment, schemaService, metricsService, lagHealthIndicator, KafkaConsumer::new);
     }
 
-    public KafkaConsumerService(AppConfig appConfig, Cache cache, Environment environment,
+    public KafkaConsumerService(AppConfig appConfig, CacheFactory cacheFactory, Environment environment,
             SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator,
             Function<Properties, Consumer<String, byte[]>> consumerFactory) {
         this.appConfig = appConfig;
-        this.cache = cache;
+        this.cacheFactory = cacheFactory;
         this.environment = environment;
         this.schemaService = schemaService;
         this.metricsService = metricsService;
@@ -162,7 +162,7 @@ public class KafkaConsumerService {
         if (value == null) {
             // Tombstone
             if (key != null) {
-                cache.remove(key);
+                cacheFactory.getAllStores().forEach(store -> store.remove(key));
                 metricsService.incrementTombstonesProcessed();
                 logger.debug("Removed record for key: {}", key);
             }
@@ -176,24 +176,26 @@ public class KafkaConsumerService {
             return;
         }
 
-        metricsService.incrementUpdatesReceived();
-
         ByteBuffer buffer = ByteBuffer.wrap(value);
         buffer.get(); // Skip magic byte
         int schemaId = buffer.getInt();
 
-        // Ensure schema is cached (prefetch)
         try {
-            schemaService.getSchema(schemaId);
-        } catch (Exception e) {
-            logger.error("Failed to prefetch schema {}", schemaId, e);
-            // We continue even if schema fetch failed?
-            // If we can't get schema, the web handler will also fail.
-            // But we still cache the bytes.
-        }
+            org.apache.avro.Schema schema = schemaService.getSchema(schemaId);
+            String fullName = schema.getFullName();
+            Cache store = cacheFactory.getStoreForSchema(fullName);
 
-        if (key != null) {
-            cache.put(key, value);
+            if (store != null) {
+                if (key != null) {
+                    store.put(key, value);
+                    metricsService.incrementUpdatesReceived();
+                }
+            } else {
+                logger.warn("No store routed for schema {}", fullName);
+                metricsService.incrementSchemaMismatchCount();
+            }
+        } catch (Exception e) {
+            logger.error("Failed to process message with schema ID {}", schemaId, e);
         }
     }
 }

@@ -67,7 +67,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         // Cache
         "cache.stores[0].name=mem",
         "cache.stores[0].type=in_memory",
-        "cache.routes[0].path=/api",
+        "cache.routes[0].path=/",
         "cache.routes[0].store=mem"
 })
 public class DynamicRouteTest {

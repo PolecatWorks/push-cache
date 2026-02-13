@@ -4,6 +4,7 @@ import com.polecatworks.pushcache.config.AppConfig;
 import com.polecatworks.pushcache.config.StoreDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
@@ -12,7 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Service
-public class CacheFactory {
+public class CacheFactory implements DisposableBean {
     private static final Logger logger = LoggerFactory.getLogger(CacheFactory.class);
 
     private final Map<String, Cache> stores = new LinkedHashMap<>();
@@ -27,7 +28,13 @@ public class CacheFactory {
                     stores.put(storeDef.getName(), new InMemoryCache(storeDef.getName(), metricsService));
                     logger.info("Initialized InMemory store: {}", storeDef.getName());
                 } else if (storeDef.getType() == StoreDefinition.StoreType.REDIS) {
-                    logger.warn("Redis store '{}' configured but not implemented yet. Skipping.", storeDef.getName());
+                    try {
+                        stores.put(storeDef.getName(), new RedisCache(storeDef));
+                        logger.info("Initialized Redis store: {}", storeDef.getName());
+                    } catch (Exception e) {
+                        logger.error("Failed to initialize Redis store: {}", storeDef.getName(), e);
+                        throw new RuntimeException("Failed to initialize Redis store: " + storeDef.getName(), e);
+                    }
                 }
 
                 // Map Schemas to Store
@@ -80,5 +87,18 @@ public class CacheFactory {
             return stores.get("default");
         }
         return stores.values().iterator().next();
+    }
+
+    @Override
+    public void destroy() {
+        for (Cache cache : stores.values()) {
+            if (cache instanceof AutoCloseable) {
+                try {
+                    ((AutoCloseable) cache).close();
+                } catch (Exception e) {
+                    logger.error("Error closing cache: {}", cache.getName(), e);
+                }
+            }
+        }
     }
 }

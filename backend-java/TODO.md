@@ -37,10 +37,10 @@ Implement multi-store support (Redis + InMemory), schema-based routing for Kafka
     - [x] Refactor `RecordHandler` (or introduce a `RouterService`) to determine the target store based on the request path (prefix).
     - [x] Ensure dynamic nesting of routers is simulated (e.g., specific paths route to specific stores).
 
-- [ ] **6. Redis Implementation**
-    - [ ] Add `spring-boot-starter-data-redis` dependency.
-    - [ ] Implement `RedisCache` class using `StringRedisTemplate` (or generic `RedisTemplate<String, byte[]>`).
-    - [ ] Configure `Lettuce` connection factory based on the `RedisConfig` from YAML.
+- [x] **6. Redis Implementation**
+    - [x] Add `spring-boot-starter-data-redis` dependency.
+    - [x] Implement `RedisCache` class using `StringRedisTemplate` (or generic `RedisTemplate<String, byte[]>`).
+    - [x] Configure `Lettuce` connection factory based on the `RedisConfig` from YAML.
 
 - [ ] **7. Startup Checks**
     - [ ] Update `StartupCheckRunner` to verify connectivity to *all* configured Redis stores.

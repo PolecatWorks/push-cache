@@ -38,6 +38,17 @@ backend-java-watch:
 	export JAVA_HOME=`/usr/libexec/java_home -v 21` && \
 	./gradlew -t classes
 
+backend-java-docker:
+	{ \
+	docker build ${BE_JAVA_DIR} -t $(IMAGE_NAME)-backend-java -f ${BE_JAVA_DIR}/Dockerfile; \
+	docker image ls $(IMAGE_NAME)-backend-java; \
+	}
+
+backend-java-docker-run: backend-java-docker
+	docker run -it --rm --name $(IMAGE_NAME)-backend-java -p 8080:8080 --mount type=bind,src=$(PWD)/${BE_DIR}/test-data,dst=/test-data  \
+	-e CAPTURE_LOG=INFO \
+	$(IMAGE_NAME)-backend-java start --config /test-data/config-localhost.yaml --secrets /test-data/secrets
+
 backend-docker: PKG_NAME=push-cache
 backend-docker:
 	{ \

@@ -80,7 +80,7 @@ frontend-docker-run: frontend-docker
 ################################################################################
 
 KAFKA_BOOTSTRAP := localhost:9092
-export CONFLUENT_HOME := $(HOME)/Development/kafka/confluent-7.3.1
+export CONFLUENT_HOME := $(HOME)/Development/kafka/confluent
 
 SCHEMA_REGISTRY_START  := $(CONFLUENT_HOME)/bin/schema-registry-start
 ZOOKEEPER_SERVER_START := $(CONFLUENT_HOME)/bin/zookeeper-server-start

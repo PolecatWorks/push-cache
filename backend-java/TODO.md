@@ -46,9 +46,9 @@ Implement multi-store support (Redis + InMemory), schema-based routing for Kafka
     - [x] Update `StartupCheckRunner` to verify connectivity to *all* configured Redis stores.
     - [x] Ensure `HamsService` health checks reflect the status of all backends. (Implemented via `CacheHealthIndicator` in Actuator)
 
-- [ ] **8. Metrics Alignment**
-    - [ ] Ensure Prometheus metrics (cache size, hits, misses) are tagged by `store_name` to match Rust's granularity.
-    - [ ] Verify metric names match Rust (`requests_total`, `cache_size`, etc.).
+- [x] **8. Metrics Alignment**
+    - [x] Ensure Prometheus metrics (cache size, hits, misses) are tagged by `store_name` to match Rust's granularity.
+    - [x] Verify metric names match Rust (`requests_total`, `cache_size`, etc.).
 
 ---
 

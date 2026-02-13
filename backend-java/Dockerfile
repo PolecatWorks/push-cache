@@ -3,7 +3,7 @@ FROM gradle:8.8-jdk21 AS build
 WORKDIR /app
 COPY --chown=gradle:gradle . .
 
-RUN --mount=type=secret,id=my_certs,target=/usr/local/share/ca-certificates/ \
+RUN --mount=type=secret,id=ca.crt,target=/usr/local/share/ca-certificates/ca.crt \
     update-ca-certificates && \
     keytool -list -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit
 

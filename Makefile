@@ -11,9 +11,17 @@ IMAGE_NAME := push-cache
 
 CERTS_DIR := $(HOME)/.certs/certs-crt
 
+CERTS := $(shell find $(CERTS_DIR) -name "*.crt")
+CERT_ARGS := $(foreach cert,$(CERTS),--secret id=cert-$(notdir $(cert)),src=$(cert))
+
 ################################################################################
 # Backend & Frontend
 ################################################################################
+
+status:
+	@echo "Certificates: ${CERTS}"
+	@echo "Cert Args: ${CERT_ARGS}"
+
 
 status-ports:
 	@lsof -i tcp:8080
@@ -42,7 +50,7 @@ backend-java-watch:
 
 backend-java-docker:
 	{ \
-	docker build --secret id=my_certs,src=${CERTS_DIR} ${BE_JAVA_DIR} -t $(IMAGE_NAME)-backend-java -f ${BE_JAVA_DIR}/Dockerfile; \
+	docker build ${CERT_ARGS} ${BE_JAVA_DIR} -t $(IMAGE_NAME)-backend-java -f ${BE_JAVA_DIR}/Dockerfile; \
 	docker image ls $(IMAGE_NAME)-backend-java; \
 	}
 

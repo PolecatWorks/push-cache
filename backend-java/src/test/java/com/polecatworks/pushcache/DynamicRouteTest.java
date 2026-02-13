@@ -1,6 +1,7 @@
 package com.polecatworks.pushcache;
 
-import com.polecatworks.pushcache.service.CacheStore;
+import com.polecatworks.pushcache.service.Cache;
+import com.polecatworks.pushcache.service.InMemoryCache;
 import com.polecatworks.pushcache.service.SchemaService;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericDatumWriter;
@@ -15,6 +16,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.io.ByteArrayOutputStream;
+import java.util.Collections;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
@@ -23,6 +25,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -59,7 +62,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         // Startup Checks
         "startup-checks.fails=1",
         "startup-checks.timeout=100ms",
-        "startup-checks.enabled=false"
+        "startup-checks.enabled=false",
+
+        // Cache
+        "cache.stores[0].name=mem",
+        "cache.stores[0].type=in_memory",
+        "cache.routes[0].path=/api",
+        "cache.routes[0].store=mem"
 })
 public class DynamicRouteTest {
 
@@ -67,20 +76,23 @@ public class DynamicRouteTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private CacheStore cacheStore;
+    private Cache cache;
 
     @MockBean
     private SchemaService schemaService;
 
+    @org.junit.jupiter.api.BeforeEach
+    void setup() {
+        cache.clear();
+    }
+
     @Test
     void testListRecords() throws Exception {
-        // Need to use valid Avro or just ensure listRecords doesn't care
-        // listRecords only lists keys, so values don't matter?
-        // CacheStore stores byte[], listRecords reads keys. Safe.
-        cacheStore.put("key1", "val1".getBytes());
-        cacheStore.put("key2", "val2".getBytes());
+        cache.put("key1", "val1".getBytes());
+        cache.put("key2", "val2".getBytes());
 
-        mockMvc.perform(get("/api/"))
+        mockMvc.perform(get("/api"))
+                .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$", contains("key1", "key2")));
@@ -88,8 +100,8 @@ public class DynamicRouteTest {
 
     @Test
     void testListRecordsNoTrailingSlash() throws Exception {
-        cacheStore.put("key1", "val1".getBytes());
-        cacheStore.put("key2", "val2".getBytes());
+        cache.put("key1", "val1".getBytes());
+        cache.put("key2", "val2".getBytes());
 
         // /api is configured as base path, so /api should work same as /api/
         mockMvc.perform(get("/api"))
@@ -117,7 +129,7 @@ public class DynamicRouteTest {
         encoder.flush();
 
         byte[] content = out.toByteArray();
-        cacheStore.put("key1", content);
+        cache.put("key1", content);
 
         mockMvc.perform(get("/api/key1"))
                 .andExpect(status().isOk())
@@ -134,7 +146,7 @@ public class DynamicRouteTest {
     @Test
     void testDeleteRecord() throws Exception {
         byte[] content = "to_delete".getBytes();
-        cacheStore.put("del_key", content);
+        cache.put("del_key", content);
 
         mockMvc.perform(delete("/api/del_key"))
                 .andExpect(status().isOk())
@@ -163,7 +175,7 @@ public class DynamicRouteTest {
                 .andExpect(jsonPath("$.id").value("new_record"));
 
         // Verify it is in cache
-        byte[] cached = cacheStore.get("new_record");
+        byte[] cached = cache.get("new_record");
         org.junit.jupiter.api.Assertions.assertArrayEquals(body, cached);
     }
 

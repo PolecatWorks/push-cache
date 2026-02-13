@@ -29,6 +29,10 @@ public class AppConfig {
     @NotNull
     private StartupCheckConfig startupChecks;
 
+    @Valid
+    @NotNull
+    private CacheConfig cache;
+
     public HamsConfig getHams() {
         return hams;
     }
@@ -67,5 +71,13 @@ public class AppConfig {
 
     public void setStartupChecks(StartupCheckConfig startupChecks) {
         this.startupChecks = startupChecks;
+    }
+
+    public CacheConfig getCache() {
+        return cache;
+    }
+
+    public void setCache(CacheConfig cache) {
+        this.cache = cache;
     }
 }

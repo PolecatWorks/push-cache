@@ -152,6 +152,7 @@ pub struct StoreDefinition {
 pub enum StoreType {
     InMemory,
     Redis(RedisConfig),
+    Postgres(PostgresConfig),
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -164,6 +165,13 @@ pub struct RouteDefinition {
 pub struct RedisConfig {
     pub url: Url,
     pub prefix: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct PostgresConfig {
+    pub url: Url,
+    pub table_name: String,
+    pub pool_size: Option<u32>,
 }
 
 #[derive(Deserialize, Debug, Clone)]

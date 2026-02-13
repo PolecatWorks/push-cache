@@ -48,6 +48,7 @@ ffi-log2 = { git = "https://github.com/PolecatWorks/hams.git" }
 schema_registry_converter = { version = "^4.7", features = ["avro", "json", "blocking"] }
 redis = { version = "1.0.3", features = ["tokio-comp", "connection-manager"] }
 async-trait = "0.1.89"
+sqlx = { version = "0.8.6", features = ["runtime-tokio-native-tls", "postgres", "macros"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }

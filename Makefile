@@ -102,6 +102,9 @@ start-schema:
 compose-redis:
 	docker compose -f docker-compose/redis.yaml up
 
+compose-postgres:
+	docker compose -f docker-compose/postgres.yaml up
+
 compose-kafka-zk:
 	docker compose -f docker-compose/kafka-zk.yaml up
 

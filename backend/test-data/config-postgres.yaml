@@ -1,0 +1,52 @@
+---
+hams:
+  address: 127.0.0.1:8079
+  prefix: hams
+  logging: true
+  checks:
+    timeout: 5
+    fails: 2
+    preflights: []
+    shutdowns: []
+runtime:
+  stack_size: 3145728
+  threads: 4
+  name: push-cache
+webservice:
+  address: http://0.0.0.0:8080/cache
+  forwarding_headers: []
+  pathDynamic: /dynamic
+kafka:
+  brokers: kafka://localhost:9092
+  group_id: pushcgroup
+  topic: pcache-data
+  schema_registry_url: http://localhost:8081
+  cache_max_age: 300s
+  fetch_metadata_timeout: 5s
+  offset_reset: earliest
+  force_reset_earliest: true
+startup_checks:
+  fails: 2
+  timeout: 5s
+  enabled: true
+cache:
+  stores:
+    - name: customers
+      type: postgres
+      url: postgres://postgres:password@localhost:5432/push_cache
+      table_name: customers_cache
+      pool_size: 10
+      schemas:
+        - com.polecatworks.billing.Customer
+    - name: bills
+      type: postgres
+      url: postgres://postgres:password@localhost:5432/push_cache
+      table_name: bills_cache
+      pool_size: 5
+      schemas:
+        - com.polecatworks.billing.Bill
+  routes:
+    - path: /customers
+      store: customers
+    - path: /bills
+      store: bills

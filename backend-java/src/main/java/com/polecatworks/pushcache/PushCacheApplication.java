@@ -2,6 +2,8 @@ package com.polecatworks.pushcache;
 
 import com.polecatworks.pushcache.cli.Cli;
 import com.polecatworks.pushcache.config.AppConfig;
+import com.polecatworks.pushcache.service.Cache;
+import com.polecatworks.pushcache.service.CacheFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -50,6 +52,11 @@ public class PushCacheApplication {
                 logger.debug("Loaded Configuration:\n{}", configStr);
             }
         };
+    }
+
+    @Bean
+    public Cache defaultCache(CacheFactory cacheFactory) {
+        return cacheFactory.getDefaultCache();
     }
 
 }

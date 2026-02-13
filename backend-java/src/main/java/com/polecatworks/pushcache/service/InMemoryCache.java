@@ -1,17 +1,16 @@
 package com.polecatworks.pushcache.service;
 
-import org.springframework.stereotype.Service;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
-@Service
 public class InMemoryCache implements Cache {
     private final Map<String, byte[]> store = new ConcurrentHashMap<>();
     private final MetricsService metricsService;
-    private final String name = "default";
+    private final String name;
 
-    public InMemoryCache(MetricsService metricsService) {
+    public InMemoryCache(String name, MetricsService metricsService) {
+        this.name = name;
         this.metricsService = metricsService;
     }
 

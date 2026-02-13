@@ -23,10 +23,10 @@ Implement multi-store support (Redis + InMemory), schema-based routing for Kafka
     - [x] Refactor existing `CacheStore` to `InMemoryCache` implementing this interface.
     - [x] Ensure implementations use `CompletableFuture` or are thread-safe non-blocking compatible. (Using Synchronous for now, consistent with Spring MVC)
 
-- [ ] **3. Store & Route Initialization**
-    - [ ] Create a `CacheFactory` or service that initializes all configured stores at startup.
-    - [ ] Build the `schema_to_store` map (Schema Name -> Store Name) from configuration.
-    - [ ] Build the `path_to_store` map (URL Path -> Store Name) from configuration.
+- [x] **3. Store & Route Initialization**
+    - [x] Create a `CacheFactory` or service that initializes all configured stores at startup.
+    - [x] Build the `schema_to_store` map (Schema Name -> Store Name) from configuration.
+    - [x] Build the `path_to_store` map (URL Path -> Store Name) from configuration.
 
 - [ ] **4. Kafka Consumer Routing**
     - [ ] Update `KafkaConsumerService` to fetch the schema ID and look up the schema name.

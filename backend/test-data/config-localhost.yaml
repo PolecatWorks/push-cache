@@ -16,6 +16,7 @@ runtime:
 webservice:
   address: http://0.0.0.0:8080/cache
   forwarding_headers: []
+  pathDynamic: /dynamic
 kafka:
   brokers: kafka://localhost:9092
   group_id: pushcgroup

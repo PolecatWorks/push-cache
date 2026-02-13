@@ -3,6 +3,7 @@ package com.polecatworks.pushcache.service;
 import com.polecatworks.pushcache.config.StoreDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
@@ -149,6 +150,16 @@ public class RedisCache implements Cache, AutoCloseable {
 
         if (!keysToDelete.isEmpty()) {
             redisTemplate.delete(keysToDelete);
+        }
+    }
+
+    @Override
+    public void checkHealth() throws Exception {
+        try (RedisConnection connection = connectionFactory.getConnection()) {
+            String response = connection.ping();
+            if (!"PONG".equalsIgnoreCase(response)) {
+                 throw new RuntimeException("Redis PING failed for cache " + name + ": " + response);
+            }
         }
     }
 

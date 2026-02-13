@@ -29,16 +29,18 @@ public class StartupCheckService {
     private final AppConfig appConfig;
     private final RestClient restClient;
     private final Function<Properties, Consumer<String, String>> kafkaConsumerFactory;
+    private final CacheFactory cacheFactory;
 
     @Autowired
-    public StartupCheckService(AppConfig appConfig) {
-        this(appConfig, RestClient.builder().build(), props -> new KafkaConsumer<>(props));
+    public StartupCheckService(AppConfig appConfig, CacheFactory cacheFactory) {
+        this(appConfig, RestClient.builder().build(), props -> new KafkaConsumer<>(props), cacheFactory);
     }
 
-    public StartupCheckService(AppConfig appConfig, RestClient restClient, Function<Properties, Consumer<String, String>> kafkaConsumerFactory) {
+    public StartupCheckService(AppConfig appConfig, RestClient restClient, Function<Properties, Consumer<String, String>> kafkaConsumerFactory, CacheFactory cacheFactory) {
         this.appConfig = appConfig;
         this.restClient = restClient;
         this.kafkaConsumerFactory = kafkaConsumerFactory;
+        this.cacheFactory = cacheFactory;
     }
 
     public void runStartupChecks() throws Exception {
@@ -57,8 +59,12 @@ public class StartupCheckService {
             runCheck("Kafka Metadata Connectivity", checkConfig, this::checkKafkaMetadata)
         );
 
+        CompletableFuture<Void> cacheCheck = CompletableFuture.runAsync(() ->
+            runCheck("Cache Connectivity", checkConfig, this::checkCaches)
+        );
+
         try {
-            CompletableFuture.allOf(schemaRegistryCheck, kafkaCheck).get();
+            CompletableFuture.allOf(schemaRegistryCheck, kafkaCheck, cacheCheck).get();
             logger.info("All startup checks passed.");
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
@@ -140,6 +146,17 @@ public class StartupCheckService {
             if (partitions == null || partitions.isEmpty()) {
                 logger.warn("Kafka topic {} not found or has no partitions", topic);
                 throw new RuntimeException("Kafka topic " + topic + " not found or has no partitions");
+            }
+        }
+    }
+
+    void checkCaches() {
+        for (Cache cache : cacheFactory.getAllStores()) {
+            logger.info("Checking cache: {}", cache.getName());
+            try {
+                cache.checkHealth();
+            } catch (Exception e) {
+                throw new RuntimeException("Health check failed for cache: " + cache.getName(), e);
             }
         }
     }

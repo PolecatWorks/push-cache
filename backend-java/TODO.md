@@ -42,9 +42,9 @@ Implement multi-store support (Redis + InMemory), schema-based routing for Kafka
     - [x] Implement `RedisCache` class using `StringRedisTemplate` (or generic `RedisTemplate<String, byte[]>`).
     - [x] Configure `Lettuce` connection factory based on the `RedisConfig` from YAML.
 
-- [ ] **7. Startup Checks**
-    - [ ] Update `StartupCheckRunner` to verify connectivity to *all* configured Redis stores.
-    - [ ] Ensure `HamsService` health checks reflect the status of all backends.
+- [x] **7. Startup Checks**
+    - [x] Update `StartupCheckRunner` to verify connectivity to *all* configured Redis stores.
+    - [x] Ensure `HamsService` health checks reflect the status of all backends. (Implemented via `CacheHealthIndicator` in Actuator)
 
 - [ ] **8. Metrics Alignment**
     - [ ] Ensure Prometheus metrics (cache size, hits, misses) are tagged by `store_name` to match Rust's granularity.

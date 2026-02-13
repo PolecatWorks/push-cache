@@ -22,7 +22,7 @@ public class KafkaConsumerService {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaConsumerService.class);
     private final AppConfig appConfig;
-    private final CacheStore cacheStore;
+    private final Cache cache;
     private final Environment environment;
     private final Function<Properties, Consumer<String, byte[]>> consumerFactory;
     private final SchemaService schemaService;
@@ -33,16 +33,16 @@ public class KafkaConsumerService {
     private static final long LAG_CHECK_INTERVAL = 1000;
 
     @Autowired
-    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment,
+    public KafkaConsumerService(AppConfig appConfig, Cache cache, Environment environment,
             SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator) {
-        this(appConfig, cacheStore, environment, schemaService, metricsService, lagHealthIndicator, KafkaConsumer::new);
+        this(appConfig, cache, environment, schemaService, metricsService, lagHealthIndicator, KafkaConsumer::new);
     }
 
-    public KafkaConsumerService(AppConfig appConfig, CacheStore cacheStore, Environment environment,
+    public KafkaConsumerService(AppConfig appConfig, Cache cache, Environment environment,
             SchemaService schemaService, MetricsService metricsService, LagClearedHealthIndicator lagHealthIndicator,
             Function<Properties, Consumer<String, byte[]>> consumerFactory) {
         this.appConfig = appConfig;
-        this.cacheStore = cacheStore;
+        this.cache = cache;
         this.environment = environment;
         this.schemaService = schemaService;
         this.metricsService = metricsService;
@@ -162,7 +162,7 @@ public class KafkaConsumerService {
         if (value == null) {
             // Tombstone
             if (key != null) {
-                cacheStore.remove(key);
+                cache.remove(key);
                 metricsService.incrementTombstonesProcessed();
                 logger.debug("Removed record for key: {}", key);
             }
@@ -193,7 +193,7 @@ public class KafkaConsumerService {
         }
 
         if (key != null) {
-            cacheStore.put(key, value);
+            cache.put(key, value);
         }
     }
 }

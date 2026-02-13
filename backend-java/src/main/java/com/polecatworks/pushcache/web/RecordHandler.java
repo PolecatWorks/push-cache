@@ -1,7 +1,7 @@
 package com.polecatworks.pushcache.web;
 
 import com.polecatworks.pushcache.config.AppConfig;
-import com.polecatworks.pushcache.service.CacheStore;
+import com.polecatworks.pushcache.service.Cache;
 import com.polecatworks.pushcache.service.MetricsService;
 import com.polecatworks.pushcache.service.SchemaService;
 import org.apache.avro.Schema;
@@ -34,14 +34,14 @@ public class RecordHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(RecordHandler.class);
 
-    private final CacheStore cacheStore;
+    private final Cache cache;
     private final AppConfig appConfig;
     private final SchemaService schemaService;
     private final MetricsService metricsService;
 
-    public RecordHandler(CacheStore cacheStore, AppConfig appConfig, SchemaService schemaService,
+    public RecordHandler(Cache cache, AppConfig appConfig, SchemaService schemaService,
             MetricsService metricsService) {
-        this.cacheStore = cacheStore;
+        this.cache = cache;
         this.appConfig = appConfig;
         this.schemaService = schemaService;
         this.metricsService = metricsService;
@@ -52,7 +52,7 @@ public class RecordHandler {
         Optional<String> limitParam = request.param("limit");
         Optional<String> offsetParam = request.param("offset");
 
-        List<String> keys = new ArrayList<>(cacheStore.getKeys());
+        List<String> keys = new ArrayList<>(cache.getKeys());
 
         if (filter.isPresent()) {
             String filterVal = filter.get();
@@ -109,7 +109,7 @@ public class RecordHandler {
         int schemaId = ByteBuffer.wrap(body, 1, 4).getInt();
         logger.info("Received record with Schema ID: {}", schemaId);
 
-        cacheStore.put(id, body);
+        cache.put(id, body);
 
         return ServerResponse.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -119,7 +119,7 @@ public class RecordHandler {
     public ServerResponse getRecord(ServerRequest request) {
         metricsService.incrementRequestsTotal();
         String id = request.pathVariable("id");
-        byte[] data = cacheStore.get(id);
+        byte[] data = cache.get(id);
 
         if (data == null) {
             metricsService.incrementRequestsMiss();
@@ -180,7 +180,7 @@ public class RecordHandler {
 
     public ServerResponse deleteRecord(ServerRequest request) {
         String id = request.pathVariable("id");
-        byte[] data = cacheStore.remove(id);
+        byte[] data = cache.remove(id);
 
         if (data == null) {
             return ServerResponse.status(HttpStatus.NOT_FOUND)

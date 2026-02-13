@@ -73,6 +73,10 @@ public class MetricsService {
         cacheSize.decrementAndGet();
     }
 
+    public void setCacheSize(long size) {
+        cacheSize.set(size);
+    }
+
     public void setConsumerLag(long lag) {
         consumerLag.set(lag);
     }

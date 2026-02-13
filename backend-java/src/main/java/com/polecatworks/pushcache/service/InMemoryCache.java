@@ -55,4 +55,9 @@ public class InMemoryCache implements Cache {
         store.clear();
         metricsService.setCacheSize(0);
     }
+
+    @Override
+    public void checkHealth() throws Exception {
+        // Always healthy
+    }
 }

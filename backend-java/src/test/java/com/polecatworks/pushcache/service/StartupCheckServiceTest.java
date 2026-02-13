@@ -32,6 +32,8 @@ class StartupCheckServiceTest {
     private RestClient restClient;
     @Mock
     private Consumer<String, String> kafkaConsumer;
+    @Mock
+    private CacheFactory cacheFactory;
 
     private StartupCheckService service;
 
@@ -39,7 +41,7 @@ class StartupCheckServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         Function<Properties, Consumer<String, String>> consumerFactory = props -> kafkaConsumer;
-        service = new StartupCheckService(appConfig, restClient, consumerFactory);
+        service = new StartupCheckService(appConfig, restClient, consumerFactory, cacheFactory);
     }
 
     @Test
@@ -111,5 +113,27 @@ class StartupCheckServiceTest {
         when(kafkaConsumer.partitionsFor(eq("test-topic"), any())).thenReturn(Collections.emptyList());
 
         assertThrows(RuntimeException.class, () -> service.checkKafkaMetadata());
+    }
+
+    @Test
+    void testCheckCachesSuccess() throws Exception {
+        Cache cache1 = mock(Cache.class);
+        Cache cache2 = mock(Cache.class);
+        when(cacheFactory.getAllStores()).thenReturn(List.of(cache1, cache2));
+
+        assertDoesNotThrow(() -> service.checkCaches());
+
+        verify(cache1).checkHealth();
+        verify(cache2).checkHealth();
+    }
+
+    @Test
+    void testCheckCachesFailure() throws Exception {
+        Cache cache1 = mock(Cache.class);
+        when(cache1.getName()).thenReturn("cache1");
+        doThrow(new RuntimeException("Down")).when(cache1).checkHealth();
+        when(cacheFactory.getAllStores()).thenReturn(List.of(cache1));
+
+        assertThrows(RuntimeException.class, () -> service.checkCaches());
     }
 }

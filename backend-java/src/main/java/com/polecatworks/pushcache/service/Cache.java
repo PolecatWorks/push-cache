@@ -10,4 +10,5 @@ public interface Cache {
     Set<String> getKeys();
     boolean containsKey(String key);
     void clear();
+    void checkHealth() throws Exception;
 }

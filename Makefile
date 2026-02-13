@@ -9,6 +9,8 @@ BE_JAVA_DIR := backend-java
 FE_DIR := frontend
 IMAGE_NAME := push-cache
 
+CERTS_DIR := $(HOME)/.certs/certs-crt
+
 ################################################################################
 # Backend & Frontend
 ################################################################################
@@ -40,7 +42,7 @@ backend-java-watch:
 
 backend-java-docker:
 	{ \
-	docker build ${BE_JAVA_DIR} -t $(IMAGE_NAME)-backend-java -f ${BE_JAVA_DIR}/Dockerfile; \
+	docker build --secret id=my_certs,src=${CERTS_DIR} ${BE_JAVA_DIR} -t $(IMAGE_NAME)-backend-java -f ${BE_JAVA_DIR}/Dockerfile; \
 	docker image ls $(IMAGE_NAME)-backend-java; \
 	}
 

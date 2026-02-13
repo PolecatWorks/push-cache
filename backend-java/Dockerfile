@@ -2,7 +2,12 @@
 FROM gradle:8.8-jdk21 AS build
 WORKDIR /app
 COPY --chown=gradle:gradle . .
-RUN gradle bootJar --no-daemon
+
+RUN --mount=type=secret,id=my_certs,target=/usr/local/share/ca-certificates/ \
+    update-ca-certificates && \
+    keytool -list -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit
+
+RUN --mount=type=cache,target=/root/.m2 gradle bootJar --no-daemon
 
 # Stage 2: Create a custom JRE
 FROM eclipse-temurin:21 AS jre-build

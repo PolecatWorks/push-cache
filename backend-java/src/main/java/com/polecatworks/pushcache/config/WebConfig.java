@@ -1,6 +1,12 @@
 package com.polecatworks.pushcache.config;
 
+import com.polecatworks.pushcache.service.Cache;
+import com.polecatworks.pushcache.service.CacheFactory;
+import com.polecatworks.pushcache.service.MetricsService;
+import com.polecatworks.pushcache.service.SchemaService;
 import com.polecatworks.pushcache.web.RecordHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
 import org.springframework.context.annotation.Bean;
@@ -14,6 +20,8 @@ import java.net.URI;
 @Configuration
 public class WebConfig {
 
+    private static final Logger logger = LoggerFactory.getLogger(WebConfig.class);
+
     @Bean
     public WebServerFactoryCustomizer<ConfigurableServletWebServerFactory> webServerFactoryCustomizer(
             AppConfig appConfig) {
@@ -26,26 +34,53 @@ public class WebConfig {
     }
 
     @Bean
-    public RouterFunction<ServerResponse> route(AppConfig appConfig, RecordHandler handler) {
-        String path = "/";
+    public RouterFunction<ServerResponse> route(AppConfig appConfig, CacheFactory cacheFactory,
+            SchemaService schemaService, MetricsService metricsService) {
+        RouterFunctions.Builder routeBuilder = RouterFunctions.route();
+
+        String basePath = "";
         if (appConfig.getWebservice().getAddress() != null) {
             String uriPath = appConfig.getWebservice().getAddress().getPath();
             if (uriPath != null && !uriPath.isEmpty()) {
-                path = uriPath;
+                basePath = uriPath;
             }
         }
 
-        // Normalize path: ensure it does not end with / unless it is just /
-        if (path.length() > 1 && path.endsWith("/")) {
-            path = path.substring(0, path.length() - 1);
+        // Ensure basePath does not end with slash unless it's just root (which is empty string effectively for concat)
+        if (basePath.endsWith("/")) {
+            basePath = basePath.substring(0, basePath.length() - 1);
         }
 
-        return RouterFunctions.route()
-                .path(path, builder -> builder
+        if (appConfig.getCache().getRoutes() != null) {
+            for (RouteDefinition routeDef : appConfig.getCache().getRoutes()) {
+                Cache store = cacheFactory.getStore(routeDef.getStore());
+                if (store == null) {
+                    logger.error("Store not found: {}", routeDef.getStore());
+                    continue;
+                }
+
+                RecordHandler handler = new RecordHandler(store, appConfig, schemaService, metricsService);
+
+                String fullPath = (basePath + routeDef.getPath()).replace("//", "/");
+                // Ensure fullPath starts with /
+                if (!fullPath.startsWith("/")) {
+                    fullPath = "/" + fullPath;
+                }
+                // Ensure no trailing slash for exact matching unless desired
+                if (fullPath.length() > 1 && fullPath.endsWith("/")) {
+                    fullPath = fullPath.substring(0, fullPath.length() - 1);
+                }
+
+                logger.info("Mounting route {} to store {}", fullPath, routeDef.getStore());
+
+                routeBuilder.path(fullPath, builder -> builder
                         .GET("", handler::listRecords)
                         .GET("/{id}", handler::getRecord)
                         .DELETE("/{id}", handler::deleteRecord)
-                        .POST("/{id}", handler::createRecord))
-                .build();
+                        .POST("/{id}", handler::createRecord));
+            }
+        }
+
+        return routeBuilder.build();
     }
 }

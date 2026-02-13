@@ -33,9 +33,9 @@ Implement multi-store support (Redis + InMemory), schema-based routing for Kafka
     - [x] Implement logic to route the message to the specific `Cache` instance based on the schema name.
     - [x] Handle Tombstones: Broadcast delete to *all* stores (matching Rust behavior).
 
-- [ ] **5. REST API Routing**
-    - [ ] Refactor `RecordHandler` (or introduce a `RouterService`) to determine the target store based on the request path (prefix).
-    - [ ] Ensure dynamic nesting of routers is simulated (e.g., specific paths route to specific stores).
+- [x] **5. REST API Routing**
+    - [x] Refactor `RecordHandler` (or introduce a `RouterService`) to determine the target store based on the request path (prefix).
+    - [x] Ensure dynamic nesting of routers is simulated (e.g., specific paths route to specific stores).
 
 - [ ] **6. Redis Implementation**
     - [ ] Add `spring-boot-starter-data-redis` dependency.

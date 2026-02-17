@@ -21,6 +21,21 @@ kafka:
   fetch_metadata_timeout: 5s
   offset_reset: earliest
   force_reset_earliest: true
+cache:
+  stores:
+    # - name: customers
+    #   type: redis
+    #   url: redis://localhost:6379
+    #   prefix: customers
+    #   schemas:
+    #     - com.polecatworks.billing.Customer
+    - name: customers
+      type: in_memory
+      schemas:
+        - com.polecatworks.billing.Customer
+  routes:
+    - path: /customers
+      store: customers
 startup_checks:
   timeout: 5s
   fails: 5

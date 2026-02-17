@@ -108,7 +108,7 @@ pub async fn start_consumer(state: MyState, lag_probe: ProbeManual) -> Result<()
     let kafka_config = &state.config.kafka;
     info!("Starting Kafka Consumer for topic: {}", kafka_config.topic);
 
-    let group_id = kafka_config.group_id.clone();
+    let group_id = kafka_config.get_group_id().map_err(MyError::Message)?;
     info!("Consumer group id: {group_id}");
 
     let context = ConsumerStatsContext {

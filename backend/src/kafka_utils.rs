@@ -114,7 +114,10 @@ pub async fn reset_consumer_offsets(config: &MyKafkaConfig) -> Result<(), MyErro
     );
 
     let consumer: BaseConsumer = ClientConfig::new()
-        .set("group.id", &config.group_id)
+        .set(
+            "group.id",
+            &config.get_group_id().map_err(MyError::Message)?,
+        )
         .set("bootstrap.servers", &get_broker_string(config)?)
         .set("enable.auto.commit", "false")
         .create()?;

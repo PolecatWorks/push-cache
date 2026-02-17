@@ -45,6 +45,18 @@ spec:
       tag: main
       pullPolicy: Always # Dev ONLY
     configs:
+      cache:
+        stores:
+          - name: customers
+            type: redis
+            url: redis://redis.dev.svc:6379
+            prefix: customers
+            schemas:
+              - com.polecatworks.billing.Customer
+        routes:
+          - path: /customers
+            store: customers
+
       webservice:
         address: http://0.0.0.0:8080/cache
         forwarding_headers: []

@@ -169,7 +169,9 @@ pub struct RedisConfig {
 #[derive(Deserialize, Debug, Clone)]
 pub struct MyKafkaConfig {
     pub brokers: Url,
-    pub group_id: String,
+    pub group_id: Option<String>,
+    #[serde(default)]
+    pub use_hostname_as_group_id: bool,
     pub topic: String,
     pub schema_registry_url: Url,
     #[serde(with = "humantime_serde")]
@@ -178,6 +180,22 @@ pub struct MyKafkaConfig {
     pub fetch_metadata_timeout: Duration,
     pub offset_reset: KafkaOffsetReset,
     pub force_reset_earliest: bool,
+}
+
+impl MyKafkaConfig {
+    pub fn get_group_id(&self) -> Result<String, String> {
+        if self.use_hostname_as_group_id {
+            std::env::var("HOSTNAME").map_err(|_| {
+                "HOSTNAME environment variable is required when use_hostname_as_group_id is true"
+                    .to_string()
+            })
+        } else {
+            self.group_id.clone().ok_or_else(|| {
+                "group_id must be set in configuration unless use_hostname_as_group_id is true"
+                    .to_string()
+            })
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]

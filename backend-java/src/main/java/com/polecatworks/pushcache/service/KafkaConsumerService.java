@@ -120,8 +120,16 @@ public class KafkaConsumerService {
         }
         String brokerString = host + ":" + port;
 
+        String groupId = appConfig.getKafka().getGroupId();
+        if (appConfig.getKafka().isUseHostnameAsGroupId()) {
+            groupId = System.getenv("HOSTNAME");
+            if (groupId == null || groupId.isBlank()) {
+                throw new RuntimeException("HOSTNAME environment variable is required when useHostnameAsGroupId is true");
+            }
+        }
+
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerString);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, appConfig.getKafka().getGroupId());
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
         return props;

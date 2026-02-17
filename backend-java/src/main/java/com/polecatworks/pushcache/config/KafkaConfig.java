@@ -1,5 +1,6 @@
 package com.polecatworks.pushcache.config;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
@@ -10,7 +11,6 @@ public class KafkaConfig {
     @NotNull
     private URI brokers;
 
-    @NotBlank
     private String groupId;
 
     @NotBlank
@@ -29,6 +29,13 @@ public class KafkaConfig {
     private KafkaOffsetReset offsetReset;
 
     private boolean forceResetEarliest;
+
+    private boolean useHostnameAsGroupId;
+
+    @AssertTrue(message = "Either groupId must be set or useHostnameAsGroupId must be true")
+    public boolean isValidGroupId() {
+        return (groupId != null && !groupId.isBlank()) || useHostnameAsGroupId;
+    }
 
     public URI getBrokers() {
         return brokers;
@@ -92,5 +99,13 @@ public class KafkaConfig {
 
     public void setForceResetEarliest(boolean forceResetEarliest) {
         this.forceResetEarliest = forceResetEarliest;
+    }
+
+    public boolean isUseHostnameAsGroupId() {
+        return useHostnameAsGroupId;
+    }
+
+    public void setUseHostnameAsGroupId(boolean useHostnameAsGroupId) {
+        this.useHostnameAsGroupId = useHostnameAsGroupId;
     }
 }

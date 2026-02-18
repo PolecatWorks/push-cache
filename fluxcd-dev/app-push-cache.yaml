@@ -23,6 +23,19 @@ spec:
   install:
     remediation:
       retries: 3
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: push-cache-backend
+            patch: |
+              - op: add
+                path: /spec/template/metadata/labels/service
+                value: customer
+              - op: add
+                path: /spec/template/metadata/labels/topology.kubernetes.io~1zone
+                value: main
   values:
     env:
       - name: CAPTURE_LOG

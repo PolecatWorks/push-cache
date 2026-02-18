@@ -34,6 +34,14 @@ struct Cli {
     /// Kafka Topic (overrides config)
     #[arg(short, long, env = "KAFKA_TOPIC")]
     topic: Option<String>,
+
+    /// Output file for generated records (bypasses Kafka produce)
+    #[arg(short = 'o', long, value_name = "FILE")]
+    output_file: Option<PathBuf>,
+
+    /// Schema ID (required if output-file is used)
+    #[arg(short = 'i', long, value_name = "ID")]
+    schema_id: Option<i32>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -116,6 +124,55 @@ async fn main() {
         .expect("Failed to load env filter");
     tracing_subscriber::fmt().with_env_filter(env).init();
 
+    // Check configuration for output file mode
+    if let Some(output_file) = &args.output_file {
+        if args.schema_id.is_none() {
+            error!("--schema-id is required when using --output-file");
+            std::process::exit(1);
+        }
+        let schema_id = args.schema_id.unwrap();
+
+        info!(
+            "Generating {} records of type '{:?}' to file {:?} with Schema ID {}",
+            args.count, args.message_type, output_file, schema_id
+        );
+
+        let result = match args.message_type {
+            MessageType::Customer => write_records_to_file::<Customer, _>(
+                output_file,
+                schema_id,
+                args.count,
+                manual_fake_customer,
+            ),
+            MessageType::Bill => write_records_to_file::<CustomerBill, _>(
+                output_file,
+                schema_id,
+                args.count,
+                manual_fake_bill,
+            ),
+            MessageType::Usage => write_records_to_file::<UsageRecord, _>(
+                output_file,
+                schema_id,
+                args.count,
+                manual_fake_usage,
+            ),
+            MessageType::Ticket => write_records_to_file::<SupportTicket, _>(
+                output_file,
+                schema_id,
+                args.count,
+                manual_fake_ticket,
+            ),
+        };
+
+        if let Err(e) = result {
+            error!("Error writing records to file: {:?}", e);
+            std::process::exit(1);
+        }
+
+        info!("Successfully wrote records to {:?}", output_file);
+        return;
+    }
+
     // Load Config
     let config_yaml = std::fs::read_to_string(&args.config).expect("Failed to read config");
     let config: MyConfig = MyConfig::figment(&config_yaml, args.secrets)
@@ -148,6 +205,54 @@ async fn main() {
     if let Err(e) = result {
         error!("Error producing records: {:?}", e);
     }
+}
+
+/// Writes Avro-encoded records to a file in a custom format suitable for script processing.
+///
+/// Format: `KEY|BASE64_ENCODED_PAYLOAD\n`
+/// The payload includes the Magic Byte (0) and Schema ID.
+fn write_records_to_file<T, F>(
+    path: &PathBuf,
+    schema_id: i32,
+    count: usize,
+    generator: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    T: AvroSchema + Serialize + Clone + std::fmt::Debug,
+    F: Fn() -> T,
+{
+    use base64::{Engine as _, engine::general_purpose};
+    use std::io::Write;
+
+    let file = std::fs::File::create(path)?;
+    let mut writer = std::io::BufWriter::new(file);
+
+    let schema = T::get_schema();
+
+    for i in 0..count {
+        let record = generator();
+        let encoded = apache_avro::to_avro_datum(&schema, apache_avro::to_value(record.clone())?)?;
+
+        // Magic Byte + ID + Payload
+        let mut payload = vec![0u8];
+        payload.extend_from_slice(&schema_id.to_be_bytes());
+        payload.extend_from_slice(&encoded);
+
+        // Encode to Base64
+        let b64_payload = general_purpose::STANDARD.encode(&payload);
+
+        // Generate Key
+        let key = uuid::Uuid::new_v4().to_string();
+
+        // Write line
+        writeln!(writer, "{}|{}", key, b64_payload)?;
+
+        if (i + 1) % 100 == 0 {
+            debug!("Written {}/{}", i + 1, count);
+        }
+    }
+    writer.flush()?;
+    Ok(())
 }
 
 /// Produces a specified number of Avro-encoded records to a Kafka topic.

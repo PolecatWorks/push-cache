@@ -169,9 +169,7 @@ pub struct RedisConfig {
 #[derive(Deserialize, Debug, Clone)]
 pub struct MyKafkaConfig {
     pub brokers: Url,
-    pub group_id: Option<String>,
-    #[serde(default)]
-    pub use_hostname_as_group_id: bool,
+    pub group_id: GroupId,
     pub topic: String,
     pub schema_registry_url: Url,
     #[serde(with = "humantime_serde")]
@@ -184,18 +182,27 @@ pub struct MyKafkaConfig {
 
 impl MyKafkaConfig {
     pub fn get_group_id(&self) -> Result<String, String> {
-        if self.use_hostname_as_group_id {
-            std::env::var("HOSTNAME").map_err(|_| {
-                "HOSTNAME environment variable is required when use_hostname_as_group_id is true"
-                    .to_string()
-            })
-        } else {
-            self.group_id.clone().ok_or_else(|| {
-                "group_id must be set in configuration unless use_hostname_as_group_id is true"
-                    .to_string()
-            })
+        match &self.group_id {
+            GroupId::Hostname { use_hostname } => {
+                if *use_hostname {
+                    std::env::var("HOSTNAME").map_err(|_| {
+                        "HOSTNAME environment variable is required when use_hostname is true"
+                            .to_string()
+                    })
+                } else {
+                    Err("use_hostname must be true if provided as an object".to_string())
+                }
+            }
+            GroupId::Explicit(id) => Ok(id.clone()),
         }
     }
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum GroupId {
+    Hostname { use_hostname: bool },
+    Explicit(String),
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -259,5 +266,36 @@ mod test {
             Into::<Url>::into(temp_url).as_str(),
             "postgres://user0:pass0@localhost/mydb"
         );
+    }
+
+    #[test]
+    fn test_group_id_deserialization() {
+        use figment::providers::Format;
+
+        #[derive(Deserialize)]
+        struct ConfigWrapper {
+            group_id: GroupId,
+        }
+
+        // Test explicit string
+        let yaml = r#"
+            group_id: "my-group"
+        "#;
+        let config: ConfigWrapper = Figment::new().merge(Yaml::string(yaml)).extract().unwrap();
+        match config.group_id {
+            GroupId::Explicit(val) => assert_eq!(val, "my-group"),
+            _ => panic!("Expected Explicit variant"),
+        }
+
+        // Test hostname object
+        let yaml = r#"
+            group_id:
+              use_hostname: true
+        "#;
+        let config: ConfigWrapper = Figment::new().merge(Yaml::string(yaml)).extract().unwrap();
+        match config.group_id {
+            GroupId::Hostname { use_hostname } => assert!(use_hostname),
+            _ => panic!("Expected Hostname variant"),
+        }
     }
 }

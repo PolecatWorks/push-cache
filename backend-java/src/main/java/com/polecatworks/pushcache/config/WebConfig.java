@@ -27,8 +27,17 @@ public class WebConfig {
             AppConfig appConfig) {
         return factory -> {
             URI address = appConfig.getWebservice().getAddress();
-            if (address != null && address.getPort() != -1) {
-                factory.setPort(address.getPort());
+            if (address != null) {
+                if (address.getPort() != -1) {
+                    factory.setPort(address.getPort());
+                }
+                if (address.getHost() != null) {
+                    try {
+                        factory.setAddress(java.net.InetAddress.getByName(address.getHost()));
+                    } catch (java.net.UnknownHostException e) {
+                        logger.error("Unknown host: {}", address.getHost(), e);
+                    }
+                }
             }
         };
     }
@@ -38,15 +47,13 @@ public class WebConfig {
             SchemaService schemaService, MetricsService metricsService) {
         RouterFunctions.Builder routeBuilder = RouterFunctions.route();
 
-        String basePath = "";
-        if (appConfig.getWebservice().getAddress() != null) {
-            String uriPath = appConfig.getWebservice().getAddress().getPath();
-            if (uriPath != null && !uriPath.isEmpty()) {
-                basePath = uriPath;
-            }
+        String basePath = appConfig.getWebservice().getAddress().getPath();
+        if (basePath == null) {
+            basePath = "";
         }
 
-        // Ensure basePath does not end with slash unless it's just root (which is empty string effectively for concat)
+        // Ensure basePath does not end with slash unless it's just root (which is empty
+        // string effectively for concat)
         if (basePath.endsWith("/")) {
             basePath = basePath.substring(0, basePath.length() - 1);
         }

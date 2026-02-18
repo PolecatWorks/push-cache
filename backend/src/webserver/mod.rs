@@ -369,8 +369,7 @@ mod tests {
     async fn get_test_state() -> MyState {
         let kafka_config = MyKafkaConfig {
             brokers: "tcp://localhost:9092".parse().unwrap(),
-            group_id: Some("test".to_string()),
-            use_hostname_as_group_id: false,
+            group_id: crate::config::GroupId::Explicit("test".to_string()),
             topic: "test-topic".to_string(),
             schema_registry_url: "http://localhost:8081".parse().unwrap(),
             cache_max_age: std::time::Duration::from_secs(60),

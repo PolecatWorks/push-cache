@@ -2408,6 +2408,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-prometheus",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "criterion",

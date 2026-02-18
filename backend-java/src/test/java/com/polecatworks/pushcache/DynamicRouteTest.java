@@ -47,7 +47,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
         // WebService
         "webservice.address=http://localhost:8080/api",
-        "webservice.path-dynamic=dynamic",
 
         // Kafka
         "kafka.brokers=tcp://localhost:9092",

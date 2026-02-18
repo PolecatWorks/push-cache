@@ -1,6 +1,5 @@
 package com.polecatworks.pushcache.config;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
 import java.util.ArrayList;
@@ -13,9 +12,6 @@ public class WebServiceConfig {
 
     @NotNull
     private List<String> forwardingHeaders = new ArrayList<>();
-
-    @NotBlank
-    private String pathDynamic;
 
     public URI getAddress() {
         return address;
@@ -31,13 +27,5 @@ public class WebServiceConfig {
 
     public void setForwardingHeaders(List<String> forwardingHeaders) {
         this.forwardingHeaders = forwardingHeaders;
-    }
-
-    public String getPathDynamic() {
-        return pathDynamic;
-    }
-
-    public void setPathDynamic(String pathDynamic) {
-        this.pathDynamic = pathDynamic;
     }
 }

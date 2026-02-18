@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Create a custom Java runtime
 RUN $JAVA_HOME/bin/jlink \
-         --add-modules java.base,java.logging,java.naming,java.desktop,java.management,java.security.jgss,java.instrument,java.sql,jdk.unsupported,java.net.http,java.scripting,java.rmi,java.xml,jdk.crypto.ec \
+         --add-modules java.base,java.logging,java.naming,java.desktop,java.management,java.security.jgss,java.instrument,java.sql,jdk.unsupported,java.net.http,java.scripting,java.rmi,java.xml,jdk.crypto.ec,jdk.httpserver \
          --strip-debug \
          --no-man-pages \
          --no-header-files \
@@ -29,5 +29,5 @@ WORKDIR /app
 # Copy the built application
 COPY --from=build /app/build/libs/*.jar app.jar
 
-EXPOSE 8080
+EXPOSE 8080 8079
 ENTRYPOINT ["java", "-jar", "app.jar"]

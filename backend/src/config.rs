@@ -133,50 +133,75 @@ pub struct MyConfig {
     pub cache: CacheConfig,
 }
 
+/// Configuration for the cache behavior and routing.
 #[derive(Deserialize, Debug, Clone)]
 pub struct CacheConfig {
+    /// List of store definitions (e.g., in-memory, Redis).
     pub stores: Vec<StoreDefinition>,
+    /// List of routes mapping paths to stores.
     pub routes: Vec<RouteDefinition>,
 }
 
+/// Defines a specific cache store.
 #[derive(Deserialize, Debug, Clone)]
 pub struct StoreDefinition {
+    /// Unique name for the store.
     pub name: String,
+    /// The type of the store and its specific configuration.
     #[serde(flatten)]
     pub store_type: StoreType,
+    /// Optional list of schemas associated with this store.
     pub schemas: Option<Vec<String>>,
 }
 
+/// Supported types of cache stores.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StoreType {
+    /// In-memory cache store.
     InMemory,
+    /// Redis cache store with specific configuration.
     Redis(RedisConfig),
 }
 
+/// Defines a route that maps a URL path to a specific cache store.
 #[derive(Deserialize, Debug, Clone)]
 pub struct RouteDefinition {
+    /// The URL path to match.
     pub path: String,
+    /// The name of the store to use for this route.
     pub store: String,
 }
 
+/// Configuration for a Redis cache store.
 #[derive(Deserialize, Debug, Clone)]
 pub struct RedisConfig {
+    /// The Redis connection URL.
     pub url: Url,
+    /// Optional prefix for Redis keys.
     pub prefix: Option<String>,
 }
 
+/// Configuration for the Kafka consumer.
 #[derive(Deserialize, Debug, Clone)]
 pub struct MyKafkaConfig {
+    /// The Kafka brokers URL.
     pub brokers: Url,
+    /// The consumer group ID configuration.
     pub group_id: GroupId,
+    /// The Kafka topic to consume from.
     pub topic: String,
+    /// The Schema Registry URL.
     pub schema_registry_url: Url,
+    /// Maximum age of cached items.
     #[serde(with = "humantime_serde")]
     pub cache_max_age: Duration,
+    /// Timeout for fetching metadata.
     #[serde(with = "humantime_serde")]
     pub fetch_metadata_timeout: Duration,
+    /// Initial offset reset strategy.
     pub offset_reset: KafkaOffsetReset,
+    /// Whether to force reset offsets to earliest on startup.
     pub force_reset_earliest: bool,
 }
 
@@ -198,17 +223,24 @@ impl MyKafkaConfig {
     }
 }
 
+/// Configuration for the Kafka consumer group ID.
+/// Can be either an explicit string or a directive to use the hostname.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum GroupId {
+    /// Use the system's hostname as the group ID.
     Hostname { use_hostname: bool },
+    /// Use an explicit string as the group ID.
     Explicit(String),
 }
 
+/// Strategy for resetting Kafka offsets when no initial offset is found.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum KafkaOffsetReset {
+    /// Start from the earliest available offset.
     Earliest,
+    /// Start from the latest available offset.
     Latest,
 }
 
@@ -221,11 +253,15 @@ impl std::fmt::Display for KafkaOffsetReset {
     }
 }
 
+/// Configuration for startup health checks.
 #[derive(Deserialize, Debug, Clone)]
 pub struct StartupCheckConfig {
+    /// Number of allowed failures before giving up.
     pub fails: u32,
+    /// Timeout for each check.
     #[serde(with = "humantime_serde")]
     pub timeout: Duration,
+    /// Whether startup checks are enabled.
     pub enabled: bool,
 }
 

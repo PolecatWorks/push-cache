@@ -1,0 +1,36 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: customer
+spec:
+  host: customer
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+      localityLbSetting:
+        enabled: true
+        distribute:
+        - from: "*"
+          to:
+            "main": 100
+            "fallback": 0
+    outlierDetection:
+      consecutive5xxErrors: 1
+      interval: 1s
+      baseEjectionTime: 1m
+      maxEjectionPercent: 100
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: customer
+spec:
+  hosts:
+  - customer
+  gateways:
+  - mesh
+  http:
+  - name: customer-route
+    route:
+    - destination:
+        host: customer

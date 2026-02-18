@@ -9,11 +9,9 @@ spec:
       simple: ROUND_ROBIN
       localityLbSetting:
         enabled: true
-        distribute:
-        - from: "*"
-          to:
-            "main": 100
-            "fallback": 0
+        failover:
+          - from: "main"
+            to: "fallback"
     outlierDetection:
       consecutive5xxErrors: 1
       interval: 1s
@@ -26,11 +24,11 @@ metadata:
   name: customer
 spec:
   hosts:
-  - customer
+    - customer
   gateways:
-  - mesh
+    - mesh
   http:
-  - name: customer-route
-    route:
-    - destination:
-        host: customer
+    - name: customer-route
+      route:
+        - destination:
+            host: customer

@@ -73,7 +73,7 @@ jobs:
           platform=${{ matrix.platform }}
           repo_name="${{ github.repository }}"
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "IMAGE_NAME_LOWERCASE=dev/$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java" >> $GITHUB_ENV
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]' | sed 's|/|/dev/|')-backend-java" >> $GITHUB_ENV
           else
             echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java" >> $GITHUB_ENV
           fi
@@ -163,7 +163,7 @@ jobs:
         run: |
           repo_name="${{ github.repository }}"
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "IMAGE_NAME_LOWERCASE=dev/$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java" >> $GITHUB_ENV
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]' | sed 's|/|/dev/|')-backend-java" >> $GITHUB_ENV
           else
             echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java" >> $GITHUB_ENV
           fi

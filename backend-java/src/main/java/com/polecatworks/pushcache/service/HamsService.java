@@ -74,6 +74,26 @@ public class HamsService implements DisposableBean {
                 }
             });
 
+            // Handler for /startup
+            server.createContext(basePath + "/startup", (exchange) -> {
+                String response = "Startup OK";
+                exchange.sendResponseHeaders(200, response.length());
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(response.getBytes());
+                }
+            });
+
+            // Handler for /metrics
+            logger.info("Registering metrics handler at {}", basePath + "/metrics");
+            server.createContext(basePath + "/metrics", (exchange) -> {
+                String response = "# HELP app_info Application info\n# TYPE app_info gauge\napp_info{app=\"push-cache\", status=\"up\"} 1\n";
+                exchange.getResponseHeaders().set("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+                exchange.sendResponseHeaders(200, response.length());
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(response.getBytes());
+                }
+            });
+
             server.setExecutor(null); // creates a default executor
             server.start();
             logger.info("Hams server started at http://{}:{}{}", host, port, basePath);

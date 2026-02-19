@@ -2,9 +2,9 @@
 set -e
 
 # Configuration
-DURATION="30s"
-CONCURRENCY=100
-BASE_URL="http://127.0.0.1:8080/cache/customers"
+DURATION=${DURATION:30s}
+CONCURRENCY=${CONCURRENCY:100}
+BASE_URL=${BASE_URL:"http://127.0.0.1:8080/cache/customers"}
 
 
 # 0. Ensure local cargo bin is in PATH

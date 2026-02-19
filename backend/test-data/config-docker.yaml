@@ -1,6 +1,6 @@
 ---
 hams:
-  address: 127.0.0.1:8079
+  address: 0.0.0.0:8079
   prefix: hams
   logging: true
   checks:
@@ -17,10 +17,10 @@ webservice:
   address: http://0.0.0.0:8080/cache
   forwarding_headers: []
 kafka:
-  brokers: kafka://host.docker.internal:9092
+  brokers: kafka://kafka:29092
   group_id: pushcgroup
   topic: pcache-data
-  schema_registry_url: http://host.docker.internal:8081
+  schema_registry_url: http://schema-registry:8081
   cache_max_age: 300s
   fetch_metadata_timeout: 5s
   offset_reset: earliest
@@ -33,7 +33,7 @@ cache:
   stores:
     - name: customers
       type: redis
-      url: redis://host.docker.internal:6379
+      url: redis://redis:6379
       prefix: customers
       schemas:
         - com.polecatworks.billing.Customer

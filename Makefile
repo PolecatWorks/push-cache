@@ -45,7 +45,7 @@ backend-java-docker:
 	}
 
 backend-java-docker-run: backend-java-docker
-	docker run -it --rm --name $(IMAGE_NAME)-backend-java -p 8080:8080 --mount type=bind,src=$(PWD)/${BE_DIR}/test-data,dst=/test-data  \
+	docker run -it --rm --name $(IMAGE_NAME)-backend-java --network docker-compose_default -p 8079:8079 -p 8080:8080  --mount type=bind,src=$(PWD)/${BE_DIR}/test-data,dst=/test-data  \
 	-e CAPTURE_LOG=INFO \
 	$(IMAGE_NAME)-backend-java start --config /test-data/config-docker.yaml --secrets /test-data/secrets
 

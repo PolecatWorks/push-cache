@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Create a custom Java runtime
 RUN $JAVA_HOME/bin/jlink \
-         --add-modules java.base,java.logging,java.naming,java.desktop,java.management,java.security.jgss,java.instrument,java.sql,jdk.unsupported,java.net.http,java.scripting,java.rmi,java.xml,jdk.crypto.ec,jdk.httpserver \
+         --add-modules java.base,java.logging,java.naming,java.desktop,java.management,java.security.jgss,java.instrument,java.sql,jdk.unsupported,java.net.http,java.scripting,java.rmi,java.xml,jdk.crypto.ec,jdk.httpserver,jdk.naming.dns,jdk.crypto.cryptoki \
          --strip-debug \
          --no-man-pages \
          --no-header-files \

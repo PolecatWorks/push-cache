@@ -18,11 +18,14 @@ The service consists of two main components running concurrently:
 graph TD
     K[Kafka Topic] -- Avro Messages --> C(Kafka Consumer)
     SR[Schema Registry] -- Schema Validation --> C
-    C -- Insert/Update/Remove --> M[(In-Memory Cache)]
+    C -- Insert/Update/Remove --> Router{Cache Router}
+    Router --> M[(In-Memory Cache)]
+    Router --> Redis[(Redis Cache)]
 
-    Client[HTTP Client] -- GET /api/users/:id --> API(Web Service)
-    API -- Lookup --> M
-    M -- Customer Data --> API
+    Client[HTTP Client] -- GET /api/* --> API(Web Service)
+    API -- Lookup --> Router
+    M -- Data --> API
+    Redis -- Data --> API
     API -- JSON Response --> Client
 ```
 
@@ -175,6 +178,44 @@ cache:
       store: "mem"
 
 ```
+
+### Cache Configuration
+
+The application uses a flexible caching layer that allows you to define multiple cache **stores** and map specific request paths to these stores using **routes**.
+
+#### Stores
+A store defines a backend where data is cached. Supported types are `in_memory` and `redis`.
+Each store configuration must have a unique `name` and a `type` (`in_memory` or `redis`).
+
+- **`in_memory`**: A fast, local memory cache.
+  - `schemas` (optional): A list of Avro schema names to restrict what data is stored in this cache. If omitted or empty, it stores all schemas.
+- **`redis`**: A Redis-backed cache for distributed setups.
+  - `url`: The Redis connection string (e.g., `redis://localhost:6379`). Supports usernames and passwords.
+  - `prefix` (optional): A string prefix to prepend to all keys stored in Redis by this application, which is useful when sharing a Redis instance among multiple services.
+
+#### Routes
+Routes determine which store handles the incoming requests based on the API URL path.
+- `path`: The access path configured for this route (e.g., `/customers`).
+- `store`: The `name` of the store defined in `stores` where queries for this path should be routed.
+
+**Example: Mixed Storage Configuration**
+```yaml
+cache:
+  stores:
+    - name: "fast_local"
+      type: "in_memory"
+      schemas: ["customer", "bill"]
+    - name: "global_redis"
+      type: "redis"
+      url: "redis://user:password@redis.internal.net:6379"
+      prefix: "prod_v1"
+  routes:
+    - path: "/local-cache"
+      store: "fast_local"
+    - path: "/global-cache"
+      store: "global_redis"
+```
+
 
 ## Data Population
 

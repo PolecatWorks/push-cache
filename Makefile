@@ -1,11 +1,11 @@
-.PHONY: backend-dev backend-test backend-app-auth frontend-dev \
+.PHONY: rust-container-dev rust-container-test rust-container-app-auth frontend-dev \
 	start-zookeeper start-kafka start-schema \
 	topics-list topics-create topics-delete topic-describe \
 	groups-list groups-describe \
 	populate-help populate-customers populate-bills populate-usage populate-tickets
 
-BE_DIR := backend
-BE_JAVA_DIR := backend-java
+BE_DIR := rust-container
+BE_JAVA_DIR := java-container
 FE_DIR := frontend
 IMAGE_NAME := push-cache
 
@@ -18,62 +18,49 @@ status-ports:
 	@lsof -i tcp:4200
 
 
-backend-dev: export CAPTURE_LOG=INFO
-backend-dev:
+rust-container-dev: export CAPTURE_LOG=INFO
+rust-container-dev:
 	cd ${BE_DIR} && cargo watch  -x "run -- start --config test-data/config-localhost.yaml --secrets test-data/secrets"
 
-backend-test:
+rust-container-test:
 	cd ${BE_DIR} && cargo watch --ignore test_data -x "test"
 
-backend-java-run:
+java-container-run:
 	export JAVA_HOME=`/usr/libexec/java_home -v 21` && cd ${BE_JAVA_DIR} && ./gradlew bootRun --args='start --config ../${BE_DIR}/test-data/config-localhost.yaml --secrets ../${BE_DIR}/test-data/secrets'
 
-backend-java-dev:
-	cd backend-java && \
+java-container-dev:
+	cd java-container && \
 	export JAVA_HOME=`/usr/libexec/java_home -v 21` && \
-	./gradlew bootRun --args='start --config ../backend/test-data/config-localhost.yaml --secrets ../backend/test-data/secrets'
+	./gradlew bootRun --args='start --config ../rust-container/test-data/config-localhost.yaml --secrets ../rust-container/test-data/secrets'
 
-backend-java-watch:
-	cd backend-java && \
+java-container-watch:
+	cd java-container && \
 	export JAVA_HOME=`/usr/libexec/java_home -v 21` && \
 	./gradlew -t classes
 
-backend-java-docker:
+java-container-docker:
 	{ \
-	docker build ${BE_JAVA_DIR} -t $(IMAGE_NAME)-backend-java -f ${BE_JAVA_DIR}/Dockerfile; \
-	docker image ls $(IMAGE_NAME)-backend-java; \
+	docker build ${BE_JAVA_DIR} -t $(IMAGE_NAME):java-latest -f ${BE_JAVA_DIR}/Dockerfile; \
+	docker image ls $(IMAGE_NAME):java-latest; \
 	}
 
-backend-java-docker-run: backend-java-docker
-	docker run -it --rm --name $(IMAGE_NAME)-backend-java --network docker-compose_default -p 8079:8079 -p 8080:8080  --mount type=bind,src=$(PWD)/${BE_DIR}/test-data,dst=/test-data  \
+java-container-docker-run: java-container-docker
+	docker run -it --rm --name $(IMAGE_NAME)-java --network docker-compose_default -p 8079:8079 -p 8080:8080  --mount type=bind,src=$(PWD)/${BE_DIR}/test-data,dst=/test-data  \
 	-e CAPTURE_LOG=INFO \
-	$(IMAGE_NAME)-backend-java start --config /test-data/config-docker.yaml --secrets /test-data/secrets
+	$(IMAGE_NAME):java-latest start --config /test-data/config-docker.yaml --secrets /test-data/secrets
 
-backend-docker: PKG_NAME=push-cache
-backend-docker:
+rust-container-docker: PKG_NAME=push-cache
+rust-container-docker:
 	{ \
-	docker buildx build ${BE_DIR} -t $(IMAGE_NAME)-backend -f ${BE_DIR}/Dockerfile; \
-	docker image ls $(IMAGE_NAME)-backend; \
+	docker buildx build ${BE_DIR} -t $(IMAGE_NAME):rust-latest -f ${BE_DIR}/Dockerfile; \
+	docker image ls $(IMAGE_NAME):rust-latest; \
 	}
 
-backend-docker-run: backend-docker
-	docker run -it --rm --name $(IMAGE_NAME)-backend -p 8080:8080 --mount type=bind,src=$(PWD)/${BE_DIR}/test-data,dst=/test-data  \
+rust-container-docker-run: rust-container-docker
+	docker run -it --rm --name $(IMAGE_NAME)-rust -p 8080:8080 --mount type=bind,src=$(PWD)/${BE_DIR}/test-data,dst=/test-data  \
 	-e CAPTURE_LOG=INFO \
-	$(IMAGE_NAME)-backend start --config /test-data/config-localhost.yaml --secrets /test-data/secrets
+	$(IMAGE_NAME):rust-latest start --config /test-data/config-localhost.yaml --secrets /test-data/secrets
 
-
-frontend-dev:
-	cd frontend && ng serve
-
-frontend-docker: PKG_NAME=push-cache
-frontend-docker:
-	{ \
-	docker build ${FE_DIR} -t $(IMAGE_NAME)-frontend -f ${FE_DIR}/Dockerfile --build-arg PKG_NAME=${PKG_NAME}; \
-	docker image ls $(IMAGE_NAME)-frontend; \
-	}
-
-frontend-docker-run: frontend-docker
-	docker run -it --rm -p 4201:8080 --name $(IMAGE_NAME)-frontend $(IMAGE_NAME)-frontend
 
 ################################################################################
 # Kafka Infrastructure

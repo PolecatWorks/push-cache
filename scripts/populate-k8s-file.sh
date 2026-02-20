@@ -3,7 +3,7 @@ set -e
 
 NAMESPACE="dev"
 POD_NAME="populate-kafka-script"
-BACKEND_DIR="backend"
+BACKEND_DIR="rust-container"
 BINARY_PATH="$BACKEND_DIR/target/release/examples/populate_kafka"
 DATA_FILE="data.b64"
 

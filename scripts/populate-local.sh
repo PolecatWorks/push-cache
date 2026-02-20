@@ -2,8 +2,8 @@
 set -e
 
 # Configuration
-CONFIG_FILE="backend/test-data/config-localhost.yaml"
-SECRETS_DIR="backend/test-data/secrets" # Assuming secrets might be here or not needed if config doesn't use them (localhost usually doesn't need real secrets)
+CONFIG_FILE="rust-container/test-data/config-localhost.yaml"
+SECRETS_DIR="rust-container/test-data/secrets" # Assuming secrets might be here or not needed if config doesn't use them (localhost usually doesn't need real secrets)
 
 # Aligned with populate-k8s.sh
 MESSAGE_TYPE="${MESSAGE_TYPE:-customer}"
@@ -19,7 +19,7 @@ echo "Populating Kafka with $COUNT records of type '$MESSAGE_TYPE' to topic '$TO
 # Create a dummy secrets dir if missing to satisfy the arg
 mkdir -p "$SECRETS_DIR"
 
-POPULATE_OUTPUT=$(RUST_LOG=warn cargo run --manifest-path backend/Cargo.toml --release --example populate_kafka -- \
+POPULATE_OUTPUT=$(RUST_LOG=warn cargo run --manifest-path rust-container/Cargo.toml --release --example populate_kafka -- \
     --count $COUNT \
     --config "$CONFIG_FILE" \
     --secrets "$SECRETS_DIR" \

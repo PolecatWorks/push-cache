@@ -4,29 +4,25 @@ WORKDIR /app
 COPY --chown=gradle:gradle . .
 RUN gradle bootJar --no-daemon
 
-# # Stage 2: Create a custom JRE
-# FROM eclipse-temurin:21 AS jre-build
-# WORKDIR /app
+# Stage 2: Create a custom JRE
+FROM eclipse-temurin:21 AS jre-build
 
-# # Create a custom Java runtime
-# RUN $JAVA_HOME/bin/jlink \
-#          --add-modules java.base,java.logging,java.naming,java.desktop,java.management,java.security.jgss,java.instrument,java.sql,jdk.unsupported,java.net.http,java.scripting,java.rmi,java.xml,jdk.crypto.ec,jdk.httpserver,jdk.naming.dns,jdk.crypto.cryptoki \
-#          --strip-debug \
-#          --no-man-pages \
-#          --no-header-files \
-#          --compress=2 \
-#          --output /javaruntime
+# Create a custom Java runtime
+RUN $JAVA_HOME/bin/jlink \
+         --add-modules java.base,java.logging,java.naming,java.desktop,java.management,java.security.jgss,java.instrument,java.sql,jdk.unsupported,java.net.http,java.scripting,java.rmi,java.xml,jdk.crypto.ec,jdk.httpserver,jdk.naming.dns,jdk.crypto.cryptoki \
+         --strip-debug \
+         --no-man-pages \
+         --no-header-files \
+         --compress=2 \
+         --output /javaruntime
 
-# # Stage 3: Create the final image
-# FROM ubuntu:24.04
-# ENV JAVA_HOME=/opt/java/openjdk
-# ENV PATH="${JAVA_HOME}/bin:${PATH}"
+# Stage 3: Create the final image
+FROM ubuntu:24.04
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# # Copy the custom JRE
-# COPY --from=jre-build /javaruntime $JAVA_HOME
-
-# Stage 2: Create the final image
-FROM eclipse-temurin:21-jre
+# Copy the custom JRE
+COPY --from=jre-build /javaruntime $JAVA_HOME
 
 WORKDIR /app
 

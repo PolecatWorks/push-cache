@@ -101,9 +101,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-                    flavor: |
+          flavor: |
             prefix=java-,onlatest=true
-images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -182,7 +182,7 @@ images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         id: meta
         uses: docker/metadata-action@v5
         with:
-                    images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}
           flavor: |
             prefix=java-,onlatest=true
           annotations: |

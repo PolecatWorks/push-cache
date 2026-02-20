@@ -232,38 +232,28 @@ The repository includes a `populate_kafka` example tool for generating test data
 
 **Basic usage:**
 ```bash
-cd backend
-cargo run --example populate_kafka -- \
-  --config test-data/config-localhost.yaml \
-  --secrets test-data/secrets \
-  --message-type customer \
-  --count 100
+./scripts/populate-local.sh
 ```
 
 **Generate different message types:**
 
 ```bash
 # Generate customer records (default)
-cargo run --example populate_kafka -- -c test-data/config-localhost.yaml -s test-data/secrets -m customer -n 100
+MESSAGE_TYPE=customer COUNT=100 ./scripts/populate-local.sh
 
 # Generate billing records
-cargo run --example populate_kafka -- -c test-data/config-localhost.yaml -s test-data/secrets -m bill -n 50
+MESSAGE_TYPE=bill COUNT=50 ./scripts/populate-local.sh
 
 # Generate usage records
-cargo run --example populate_kafka -- -c test-data/config-localhost.yaml -s test-data/secrets -m usage -n 200
+MESSAGE_TYPE=usage COUNT=200 ./scripts/populate-local.sh
 
 # Generate support tickets
-cargo run --example populate_kafka -- -c test-data/config-localhost.yaml -s test-data/secrets -m ticket -n 25
+MESSAGE_TYPE=ticket COUNT=25 ./scripts/populate-local.sh
 ```
 
 **Override topic:**
 ```bash
-cargo run --example populate_kafka -- \
-  --config test-data/config-localhost.yaml \
-  --secrets test-data/secrets \
-  --message-type customer \
-  --topic custom-topic \
-  --count 100
+TOPIC=custom-topic COUNT=100 ./scripts/populate-local.sh
 ```
 
 ### CLI Arguments

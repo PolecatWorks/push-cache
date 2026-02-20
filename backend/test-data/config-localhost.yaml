@@ -37,6 +37,18 @@ cache:
       prefix: customers
       schemas:
         - com.polecatworks.billing.Customer
+    - name: bills
+      type: redis
+      url: redis://localhost:6379
+      prefix: bills
+      schemas:
+        - com.polecatworks.billing.CustomerBill
+    - name: tickets
+      type: redis
+      url: redis://localhost:6379
+      prefix: tickets
+      schemas:
+        - com.polecatworks.billing.SupportTicket
     # - name: customers
     #   type: in_memory
     #   schemas:
@@ -44,6 +56,10 @@ cache:
   routes:
     - path: /customers
       store: customers
+    - path: /bills
+      store: bills
+    - path: /tickets
+      store: tickets
 # cache:
 #   type: redis
 #   url: redis://localhost:6379

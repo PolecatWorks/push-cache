@@ -108,7 +108,7 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=raw,value=${{ github.head_ref }},enable=${{ github.event_name == 'pull_request' }}
-            type=sha,format=long
+            type=sha,format=long,prefix=java-sha-
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 

@@ -240,15 +240,23 @@ The repository includes a `populate_kafka` example tool for generating test data
 ```bash
 # Generate customer records (default)
 MESSAGE_TYPE=customer COUNT=100 ./scripts/populate-local.sh
+# Load test customer endpoint
+BASE_URL=http://localhost:8080/cache/customers ./scripts/load-test.sh
 
 # Generate billing records
 MESSAGE_TYPE=bill COUNT=50 ./scripts/populate-local.sh
+# Load test bill endpoint
+BASE_URL=http://localhost:8080/cache/bills ./scripts/load-test.sh
 
 # Generate usage records
 MESSAGE_TYPE=usage COUNT=200 ./scripts/populate-local.sh
+# Load test usage endpoint
+BASE_URL=http://localhost:8080/cache/usage ./scripts/load-test.sh
 
 # Generate support tickets
 MESSAGE_TYPE=ticket COUNT=25 ./scripts/populate-local.sh
+# Load test ticket endpoint
+BASE_URL=http://localhost:8080/cache/tickets ./scripts/load-test.sh
 ```
 
 **Override topic:**

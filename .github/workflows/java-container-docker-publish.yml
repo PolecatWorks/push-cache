@@ -1,4 +1,4 @@
-name: backend Docker
+name: java-container Docker
 
 # This workflow uses actions that are not certified by GitHub.
 # They are provided by a third-party and are governed by
@@ -15,7 +15,7 @@ env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
-  IMAGE_NAME: ${{ github.repository }}-backend
+  IMAGE_NAME: ${{ github.repository }}
 
 concurrency:
   # This concurrency group ensures that only one job in the group runs at a time.
@@ -27,20 +27,20 @@ jobs:
   check-paths:
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
+      java_container: ${{ steps.filter.outputs.java_container }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-            backend:
-              - 'backend/**'
-              - '.github/workflows/backend-docker-publish.yml'
+            java_container:
+              - 'java-container/**'
+              - '.github/workflows/java-container-docker-publish.yml'
 
   build:
     needs: check-paths
-    if: needs.check-paths.outputs.backend == 'true'
+    if: needs.check-paths.outputs.java_container == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -50,7 +50,7 @@ jobs:
 
     # runs-on: ubuntu-latest
     runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-24.04' || matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' }}
-    name: ${{ matrix.platform }} Backend Docker
+    name: ${{ matrix.platform }} Java Container Docker
     permissions:
       contents: read
       packages: write
@@ -73,9 +73,9 @@ jobs:
           platform=${{ matrix.platform }}
           repo_name="${{ github.repository }}"
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]' | sed 's|/|/dev/|')-backend" >> $GITHUB_ENV
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]' | sed 's|/|/dev/|')-backend-java" >> $GITHUB_ENV
           else
-            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend" >> $GITHUB_ENV
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java" >> $GITHUB_ENV
           fi
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
@@ -101,7 +101,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+                    flavor: |
+            prefix=java-,onlatest=true
+images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -115,15 +117,15 @@ jobs:
         id: build
         uses: docker/build-push-action@v5
         with:
-          context: backend
+          context: java-container
           push: ${{ github.event_name != 'pull_request' }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
           cache-from: |
-            type=gha,scope=${{ github.repository }}-backend-${{ github.ref_name }}-${{ matrix.platform }}
-            type=gha,scope=${{ github.repository }}-backend-main-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-backend-${{ github.ref_name }}-${{ matrix.platform }}
+            type=gha,scope=${{ github.repository }}-java-container-${{ github.ref_name }}-${{ matrix.platform }}
+            type=gha,scope=${{ github.repository }}-java-container-main-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-java-container-${{ github.ref_name }}-${{ matrix.platform }}
 
       - name: Export digest
         run: |
@@ -164,9 +166,9 @@ jobs:
         run: |
           repo_name="${{ github.repository }}"
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]' | sed 's|/|/dev/|')-backend" >> $GITHUB_ENV
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]' | sed 's|/|/dev/|')-backend-java" >> $GITHUB_ENV
           else
-            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend" >> $GITHUB_ENV
+            echo "IMAGE_NAME_LOWERCASE=$(echo "$repo_name" | tr '[:upper:]' '[:lower:]')-backend-java" >> $GITHUB_ENV
           fi
 
       - name: Download digests
@@ -180,7 +182,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}
+                    images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}
+          flavor: |
+            prefix=java-,onlatest=true
           annotations: |
             type=org.opencontainers.image.description,value=${{ github.event.repository.description || 'No description provided' }}
           tags: |
@@ -233,14 +237,14 @@ jobs:
           docker buildx imagetools inspect '${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWERCASE }}:${{ steps.meta.outputs.version }}'
 
   ci-success:
-    name: Backend CI Success
+    name: Java Container CI Success
     needs: [check-paths, merge]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check Status
         run: |
-          if [[ "${{ needs.check-paths.outputs.backend }}" == 'true' ]]; then
+          if [[ "${{ needs.check-paths.outputs.java_container }}" == 'true' ]]; then
             if [[ "${{ needs.merge.result }}" != 'success' ]]; then
                echo "Build/Merge failed!"
                exit 1

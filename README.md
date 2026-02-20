@@ -2,9 +2,9 @@
 
 [![Helm CI](https://github.com/PolecatWorks/push-cache/actions/workflows/helm-publish.yaml/badge.svg)](https://github.com/PolecatWorks/push-cache/actions/workflows/helm-publish.yaml)
 
-[![rust Docker](https://github.com/PolecatWorks/push-cache/actions/workflows/backend-docker-publish.yml/badge.svg)](https://github.com/PolecatWorks/push-cache/actions/workflows/backend-docker-publish.yml)
+[![rust Docker](https://github.com/PolecatWorks/push-cache/actions/workflows/rust-container-docker-publish.yml/badge.svg)](https://github.com/PolecatWorks/push-cache/actions/workflows/rust-container-docker-publish.yml)
 
-[![java Docker](https://github.com/PolecatWorks/push-cache/actions/workflows/backend-java-docker-publish.yml/badge.svg)](https://github.com/PolecatWorks/push-cache/actions/workflows/backend-java-docker-publish.yml)
+[![java Docker](https://github.com/PolecatWorks/push-cache/actions/workflows/java-container-docker-publish.yml/badge.svg)](https://github.com/PolecatWorks/push-cache/actions/workflows/java-container-docker-publish.yml)
 
 **Push Cache** is a high-performance, in-memory caching service written in Rust. It consumes customer data from a Kafka topic (Avro formatted) and exposes it via a fast HTTP API. It is designed to be a sidecar or microservice that provides low-latency access to eventually consistent data.
 
@@ -323,21 +323,21 @@ make compose-kafka-kraft
 
 2. **Run the backend**:
     ```bash
-    make backend-dev
+    make rust-container-dev
     ```
 
 ### Testing
 Run unit tests and doctests:
 ```bash
-make backend-test
+make rust-container-test
 # OR directly:
-cd backend && cargo test
+cd rust-container && cargo test
 ```
 
 ### Docker Build
 The project uses `cargo-chef` for optimized Docker layer caching.
 ```bash
-make backend-docker
+make rust-container-docker
 ```
 
 ## Operations

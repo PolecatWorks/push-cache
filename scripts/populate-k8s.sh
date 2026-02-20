@@ -5,7 +5,7 @@ NAMESPACE="dev"
 POD_NAME="populate-kafka-script"
 # Use Rust builder image
 IMAGE="rust:1.75-slim"
-BACKEND_DIR="backend"
+BACKEND_DIR="rust-container"
 SCRIPT_NAME="populate_kafka"
 
 # Kafka and Schema Registry Configs (internal K8s DNS)
@@ -34,7 +34,7 @@ echo "Waiting for pod to be ready..."
 kubectl wait --for=condition=Ready pod/$POD_NAME -n $NAMESPACE --timeout=90s
 
 echo "Copying backend source code..."
-kubectl cp $BACKEND_DIR $NAMESPACE/$POD_NAME:/tmp/backend
+kubectl cp $BACKEND_DIR $NAMESPACE/$POD_NAME:/tmp/rust-container
 
 echo "Installing system dependencies..."
 kubectl exec -n $NAMESPACE $POD_NAME -- apt-get update -qq
@@ -80,10 +80,10 @@ echo "Creating empty secrets directory..."
 kubectl exec -n $NAMESPACE $POD_NAME -- mkdir -p /tmp/secrets
 
 echo "Building populate_kafka example..."
-kubectl exec -n $NAMESPACE $POD_NAME -- bash -c "cd /tmp/backend && cargo build --release --example populate_kafka"
+kubectl exec -n $NAMESPACE $POD_NAME -- bash -c "cd /tmp/rust-container && cargo build --release --example populate_kafka"
 
 echo "Executing population script..."
-kubectl exec -n $NAMESPACE $POD_NAME -- bash -c "cd /tmp/backend && ./target/release/examples/populate_kafka \
+kubectl exec -n $NAMESPACE $POD_NAME -- bash -c "cd /tmp/rust-container && ./target/release/examples/populate_kafka \
     --config /tmp/config.yaml \
     --secrets /tmp/secrets \
     --message-type ${MESSAGE_TYPE} \

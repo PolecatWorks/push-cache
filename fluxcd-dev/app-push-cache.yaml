@@ -23,26 +23,13 @@ spec:
   install:
     remediation:
       retries: 3
-  postRenderers:
-    - kustomize:
-        patches:
-          - target:
-              kind: Deployment
-              name: push-cache-backend
-            patch: |
-              - op: add
-                path: /spec/template/metadata/labels/service
-                value: customer
-              - op: add
-                path: /spec/template/metadata/labels/topology.kubernetes.io~1zone
-                value: main
   values:
     env:
       - name: CAPTURE_LOG
         value: INFO
     image:
-      repository: ghcr.io/polecatworks/push-cache-backend
-      tag: main
+      repository: ghcr.io/polecatworks/push-cache
+      tag: rust-main
       pullPolicy: Always # Dev ONLY
     configs:
       cache:
@@ -53,9 +40,25 @@ spec:
             prefix: customers
             schemas:
               - com.polecatworks.billing.Customer
+          - name: bills
+            type: redis
+            url: redis://localhost:6379
+            prefix: bills
+            schemas:
+              - com.polecatworks.billing.CustomerBill
+          - name: tickets
+            type: redis
+            url: redis://localhost:6379
+            prefix: tickets
+            schemas:
+              - com.polecatworks.billing.SupportTicket
         routes:
           - path: /customers
             store: customers
+          - path: /bills
+            store: bills
+          - path: /tickets
+            store: tickets
 
       webservice:
         address: http://0.0.0.0:8080/cache

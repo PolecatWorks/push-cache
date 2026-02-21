@@ -8,6 +8,10 @@
 
 **Push Cache** is a high-performance, in-memory caching service written in Rust. It consumes customer data from a Kafka topic (Avro formatted) and exposes it via a fast HTTP API. It is designed to be a sidecar or microservice that provides low-latency access to eventually consistent data.
 
+It is not viable to use Istio to redirect traffic to the cache and then back to the original service on failure.
+It is also not sensible as that would risk the originating service from being hit with too much traffic that it cannot handle.
+This cache system should be used as the authorative endpoint for the data.
+
 ## Architecture
 
 The service consists of two main components running concurrently:

@@ -10,7 +10,7 @@ spec:
     - istio-ingress/k8s-gateway
     - mesh # applies to all the sidecars in the mesh
   http:
-    - name: push-cache-backend
+    - name: push-cache
       match:
         - uri:
             prefix: /cache

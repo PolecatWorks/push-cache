@@ -67,10 +67,24 @@ impl ClientContext for ConsumerStatsContext {
 }
 
 impl ConsumerContext for ConsumerStatsContext {
+    fn pre_rebalance(&self, _base_consumer: &BaseConsumer<Self>, rebalance: &Rebalance) {
+        match rebalance {
+            Rebalance::Assign(partitions) => {
+                info!("Pre-rebalance: Assign partitions: {:?}", partitions);
+            }
+            Rebalance::Revoke(partitions) => {
+                info!("Pre-rebalance: Revoke partitions: {:?}", partitions);
+            }
+            Rebalance::Error(e) => {
+                error!("Pre-rebalance error: {}", e);
+            }
+        }
+    }
+
     fn post_rebalance(&self, base_consumer: &BaseConsumer<Self>, rebalance: &Rebalance) {
         match rebalance {
             Rebalance::Assign(partitions) => {
-                info!("Assigning partitions: {:?}", partitions);
+                info!("Post-rebalance: Assign partitions: {:?}", partitions);
 
                 if self.state.config.kafka.force_reset_earliest {
                     info!("Forcing reset to earliest for all partitions");
@@ -92,13 +106,13 @@ impl ConsumerContext for ConsumerStatsContext {
                 }
             }
             Rebalance::Revoke(partitions) => {
-                info!("Revoking partitions: {:?}", partitions);
+                info!("Post-rebalance: Revoke partitions: {:?}", partitions);
                 if let Err(e) = base_consumer.unassign() {
                     error!("Failed to unassign partitions: {}", e);
                 }
             }
             Rebalance::Error(e) => {
-                error!("Rebalance error: {}", e);
+                error!("Post-rebalance error: {}", e);
             }
         }
     }

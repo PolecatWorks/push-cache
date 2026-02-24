@@ -79,10 +79,12 @@ public class KafkaConsumerService {
                         new ConsumerRebalanceListener() {
                             @Override
                             public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+                                logger.info("Partitions revoked: {}", partitions);
                             }
 
                             @Override
                             public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+                                logger.info("Partitions assigned: {}", partitions);
                                 if (appConfig.getKafka().isForceResetEarliest()) {
                                     logger.info("Seeking to beginning for partitions: {}", partitions);
                                     consumer.seekToBeginning(partitions);

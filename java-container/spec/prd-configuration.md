@@ -71,6 +71,7 @@ The Java configuration system mirrors the Rust implementation, leveraging Spring
 7.  **Routes**: List of `RouteDefinition`.
     *   `path`: String.
     *   `store`: String.
+    *   `key_from_body`: String (optional, e.g. "userId").
 
 ## 5. Non-Goals
 - Hot reloading of configuration.

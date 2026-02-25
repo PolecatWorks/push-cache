@@ -10,6 +10,8 @@ public class RouteDefinition {
     @NotBlank
     private String store;
 
+    private String keyFromBody;
+
     public String getPath() {
         return path;
     }
@@ -24,5 +26,13 @@ public class RouteDefinition {
 
     public void setStore(String store) {
         this.store = store;
+    }
+
+    public String getKeyFromBody() {
+        return keyFromBody;
+    }
+
+    public void setKeyFromBody(String keyFromBody) {
+        this.keyFromBody = keyFromBody;
     }
 }

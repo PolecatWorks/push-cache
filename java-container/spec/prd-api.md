@@ -55,6 +55,16 @@ The API Layer exposes the cached data via RESTful endpoints, dynamically creatin
 - [ ] `cache.remove(id)`.
 - [ ] Return 200 OK (with removed value if present).
 
+### US-005: Get Record by Body
+**Description:** As a client, I want to get a record using an ID provided in the JSON body.
+
+**Acceptance Criteria:**
+- [ ] `GET [base_path]/[route_path]_by_body`.
+- [ ] Body: JSON object `{ "key_field": "id_value" }`.
+- [ ] Validate `key_field` matches configuration.
+- [ ] If missing key or invalid body, return 400 Bad Request.
+- [ ] Perform standard record retrieval using extracted ID.
+
 ## 4. Functional Requirements
 
 ### Routing Logic (`WebConfig`)

@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -36,13 +37,20 @@ public class RecordHandler {
     private final AppConfig appConfig;
     private final SchemaService schemaService;
     private final MetricsService metricsService;
+    private final String keyFromBody;
 
     public RecordHandler(Cache cache, AppConfig appConfig, SchemaService schemaService,
             MetricsService metricsService) {
+        this(cache, appConfig, schemaService, metricsService, null);
+    }
+
+    public RecordHandler(Cache cache, AppConfig appConfig, SchemaService schemaService,
+            MetricsService metricsService, String keyFromBody) {
         this.cache = cache;
         this.appConfig = appConfig;
         this.schemaService = schemaService;
         this.metricsService = metricsService;
+        this.keyFromBody = keyFromBody;
     }
 
     public ServerResponse listRecords(ServerRequest request) {
@@ -117,6 +125,50 @@ public class RecordHandler {
     public ServerResponse getRecord(ServerRequest request) {
         metricsService.incrementRequestsTotal(cache.getName());
         String id = request.pathVariable("id");
+        return retrieveRecord(id);
+    }
+
+    @SuppressWarnings("unchecked")
+    public ServerResponse getRecordByBody(ServerRequest request) {
+        metricsService.incrementRequestsTotal(cache.getName());
+
+        Map<String, Object> body;
+        try {
+            body = request.body(Map.class);
+        } catch (Exception e) {
+            return ServerResponse.badRequest()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Collections.singletonMap("message", "Invalid JSON body"));
+        }
+
+        if (keyFromBody == null) {
+            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Collections.singletonMap("message", "key_from_body not configured"));
+        }
+
+        if (!body.containsKey(keyFromBody)) {
+            return ServerResponse.badRequest()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Collections.singletonMap("message", "Missing key '" + keyFromBody + "' in body"));
+        }
+
+        Object keyVal = body.get(keyFromBody);
+        String id;
+        if (keyVal instanceof String) {
+            id = (String) keyVal;
+        } else if (keyVal instanceof Number) {
+            id = keyVal.toString();
+        } else {
+            return ServerResponse.badRequest()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Collections.singletonMap("message", "Key '" + keyFromBody + "' must be a string or number"));
+        }
+
+        return retrieveRecord(id);
+    }
+
+    private ServerResponse retrieveRecord(String id) {
         byte[] data = cache.get(id);
 
         if (data == null) {

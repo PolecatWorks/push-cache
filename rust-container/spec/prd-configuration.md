@@ -47,7 +47,7 @@ The configuration system provides a flexible, layered approach to configuring th
 **Acceptance Criteria:**
 - [ ] Config supports a `cache` section.
 - [ ] `cache.stores` list allows defining `in_memory` and `redis` stores.
-- [ ] `cache.routes` list allows mapping URL paths to store names.
+- [ ] `cache.routes` list allows mapping URL paths to store names, and optionally `key_from_body`.
 - [ ] `redis` store config includes `url` and optional `prefix`.
 
 ## 4. Functional Requirements

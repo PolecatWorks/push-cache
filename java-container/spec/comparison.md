@@ -68,7 +68,7 @@ This document highlights the architectural and implementation differences betwee
 - **Framework**: Spring WebMvc (`RouterFunctions`).
 - **Routing**: Dynamic `RouterFunction` composition.
 - **Serialization**: `apache-avro` (`GenericDatumWriter`) -> JSON Bytes -> HTTP Body.
-- **Parity**: High. Both produce identical JSON outputs from Avro data.
+- **Parity**: Medium. Java lacks the "Get Record by Body" endpoint (`_by_body` suffix) which was added to Rust for POST-like retrieval of GET resources using a JSON body.
 
 ## 6. Summary of Work Remaining
 To achieve full parity, the Java implementation requires:

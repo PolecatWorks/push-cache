@@ -28,6 +28,12 @@ pub struct RouteState {
     pub store: Arc<dyn Cache + Send + Sync>,
 }
 
+#[derive(Clone)]
+pub struct BodyRouteState {
+    pub inner: RouteState,
+    pub key_field: String,
+}
+
 #[derive(Deserialize)]
 struct ListUsersParams {
     limit: Option<usize>,
@@ -81,7 +87,7 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
                     "/{account_id}",
                     get(get_record).delete(delete_record).post(create_record),
                 )
-                .with_state(route_state);
+                .with_state(route_state.clone());
 
             let full_path = format!("{}{}", base_path, route_def.path).replace("//", "/");
             let full_path = if full_path.starts_with('/') {
@@ -92,6 +98,30 @@ pub async fn start_app_api(state: MyState, ct: CancellationToken) -> Result<(), 
 
             app = app.nest(&full_path, router);
             info!("Mounted route {} to store {}", full_path, route_def.store);
+
+            if let Some(key_field) = &route_def.key_from_body {
+                let body_route_state = BodyRouteState {
+                    inner: route_state.clone(),
+                    key_field: key_field.clone(),
+                };
+                let body_router = Router::new()
+                    .route("/", get(get_record_by_body))
+                    .with_state(body_route_state);
+
+                let raw_path = format!("{}{}_by_body", base_path, route_def.path);
+                let full_body_path = raw_path.replace("//", "/");
+                let full_body_path = if full_body_path.starts_with('/') {
+                    full_body_path
+                } else {
+                    format!("/{full_body_path}")
+                };
+
+                app = app.nest(&full_body_path, body_router);
+                info!(
+                    "Mounted body route {} to store {}",
+                    full_body_path, route_def.store
+                );
+            }
         } else {
             tracing::error!(
                 "Store {} not found for route {}",
@@ -213,20 +243,17 @@ async fn list_records(
     Ok(Json(paged_keys))
 }
 
-/// Handler for GET /dynamic/{account_id}
-/// Retrieves a customer by their Account ID from the dynamic cache.
-/// Returns 200 OK with the customer data as JSON if found, or 404 Not Found.
-async fn get_record(
-    State(state): State<RouteState>,
-    Path(account_id): Path<String>,
-) -> Result<impl IntoResponse, MyError> {
+async fn retrieve_record_logic(
+    state: &RouteState,
+    key: &str,
+) -> Result<(HeaderMap, Json<serde_json::Value>), MyError> {
     use apache_avro::from_avro_datum;
     use schema_registry_converter::schema_registry_common::BytesResult::Valid;
     use schema_registry_converter::schema_registry_common::get_bytes_result;
     use std::io::Cursor;
 
     // Get payload from cache
-    let payload_bytes = state.store.get(&account_id).await?.ok_or_else(|| {
+    let payload_bytes = state.store.get(key).await?.ok_or_else(|| {
         state.global.requests_miss.inc();
         MyError::NotFound("User not found in dynamic cache".into())
     })?;
@@ -263,6 +290,38 @@ async fn get_record(
     Ok((headers, Json(json_value)))
 }
 
+/// Handler for GET /dynamic/{account_id}
+/// Retrieves a customer by their Account ID from the dynamic cache.
+/// Returns 200 OK with the customer data as JSON if found, or 404 Not Found.
+async fn get_record(
+    State(state): State<RouteState>,
+    Path(account_id): Path<String>,
+) -> Result<impl IntoResponse, MyError> {
+    retrieve_record_logic(&state, &account_id).await
+}
+
+async fn get_record_by_body(
+    State(state): State<BodyRouteState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<impl IntoResponse, MyError> {
+    let key_val = body.get(&state.key_field).ok_or_else(|| {
+        MyError::BadRequest(format!("Missing key '{}' in body", state.key_field))
+    })?;
+
+    let key_string = match key_val {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Number(n) => n.to_string(),
+        _ => {
+            return Err(MyError::BadRequest(format!(
+                "Key '{}' must be a string or number",
+                state.key_field
+            )));
+        }
+    };
+
+    retrieve_record_logic(&state.inner, &key_string).await
+}
+
 impl IntoResponse for MyError {
     fn into_response(self) -> Response {
         #[derive(Serialize)]
@@ -272,6 +331,7 @@ impl IntoResponse for MyError {
 
         let (status, message) = match self {
             MyError::Message(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.to_string()),
+            MyError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.to_string()),
             MyError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.to_string()),
             MyError::SchemaMismatch { .. } => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -404,6 +464,7 @@ mod tests {
                 routes: vec![crate::config::RouteDefinition {
                     path: "/test".to_string(),
                     store: "test_store".to_string(),
+                    key_from_body: None,
                 }],
             },
         };
@@ -849,5 +910,97 @@ mod tests {
         // basic check
         assert_eq!(received_customer.accountId, customer.accountId);
         assert_eq!(received_customer.name, customer.name);
+    }
+
+    #[tokio::test]
+    async fn test_get_record_by_body_success() {
+        let state = get_test_state().await;
+        let store = state.stores.get("test_store").unwrap().clone();
+
+        // Populate cache
+        let customer = Customer {
+            accountId: "body_user".to_string(),
+            name: "Body User".to_string(),
+            address: "B".to_string(),
+            phone: "2".to_string(),
+            createdAt: 100,
+            updatedAt: 200,
+        };
+        store
+            .insert("body_user".to_string(), serialize_customer(&customer))
+            .await
+            .unwrap();
+
+        let body_route_state = BodyRouteState {
+            inner: RouteState {
+                global: state.clone(),
+                store: store.clone(),
+            },
+            key_field: "user_id".to_string(),
+        };
+
+        let app = Router::new()
+            .route("/", get(get_record_by_body))
+            .with_state(body_route_state);
+
+        let body = serde_json::json!({
+            "user_id": "body_user"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let received_customer: Customer = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(received_customer.accountId, "body_user");
+    }
+
+    #[tokio::test]
+    async fn test_get_record_by_body_missing_key() {
+        let state = get_test_state().await;
+        let store = state.stores.get("test_store").unwrap().clone();
+
+        let body_route_state = BodyRouteState {
+            inner: RouteState {
+                global: state.clone(),
+                store: store.clone(),
+            },
+            key_field: "user_id".to_string(),
+        };
+
+        let app = Router::new()
+            .route("/", get(get_record_by_body))
+            .with_state(body_route_state);
+
+        let body = serde_json::json!({
+            "wrong_key": "body_user"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

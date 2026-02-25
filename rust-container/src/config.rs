@@ -171,6 +171,9 @@ pub struct RouteDefinition {
     pub path: String,
     /// The name of the store to use for this route.
     pub store: String,
+    /// Optional field name to extract the ID from the JSON body.
+    #[serde(default)]
+    pub key_from_body: Option<String>,
 }
 
 /// Configuration for a Redis cache store.

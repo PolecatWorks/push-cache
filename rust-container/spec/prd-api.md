@@ -37,7 +37,19 @@ The API Layer exposes the cached data via a RESTful HTTP interface. It features 
     - [ ] Return 200 OK with JSON body.
     - [ ] Set `Cache-Control: public, max-age=[config.max_age]` header.
 
-### US-003: Create Record (Manual)
+### US-003: Get Record by Body
+**Description:** As a client, I want to retrieve a record by its ID provided in the JSON body, for cases where the ID is not in the URL path.
+
+**Acceptance Criteria:**
+- [ ] `GET [base_path]/[route_path]_by_body` (e.g., `/api/users_by_body`).
+- [ ] Body: JSON object `{ "[key_field]": "id" }`.
+- [ ] Configuration: `route.key_from_body` specifies the JSON field name.
+- [ ] Look up ID (value of key field) in the routed Store.
+- [ ] If missing key in body, return 400 Bad Request.
+- [ ] If found, return 200 OK with JSON body (same format as US-002).
+- [ ] Set `Cache-Control` header.
+
+### US-004: Create Record (Manual)
 **Description:** As a system, I want to manually insert raw Avro data into the cache (e.g., for testing or restoring).
 
 **Acceptance Criteria:**
@@ -47,7 +59,7 @@ The API Layer exposes the cached data via a RESTful HTTP interface. It features 
 - [ ] Insert directly into the routed Store.
 - [ ] Return 201 Created.
 
-### US-004: Delete Record
+### US-005: Delete Record
 **Description:** As a system, I want to manually remove a record from the cache.
 
 **Acceptance Criteria:**

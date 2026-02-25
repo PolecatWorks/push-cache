@@ -32,6 +32,15 @@ The Ingestion layer is responsible for consuming messages from a Kafka topic, re
 - [ ] Parse and cache the schema.
 - [ ] Handle failures (log error, skip message).
 
+### US-002a: Schema Preloading
+**Description:** As an operator, I want to preload specific schemas at startup to ensure critical data types can be processed immediately and to validate registry connectivity.
+
+**Acceptance Criteria:**
+- [ ] Read `kafka.preload_schemas` list from configuration.
+- [ ] Iterate through IDs and fetch each from Schema Registry.
+- [ ] Store fetched schemas in `schema_cache`.
+- [ ] Fail application startup if any preloaded schema fails to fetch or parse.
+
 ### US-003: Schema-Based Routing
 **Description:** As a developer, I want specific data types to go to specific stores (e.g., "Users" to Redis, "Settings" to Memory).
 

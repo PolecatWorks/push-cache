@@ -56,6 +56,7 @@ This document highlights the architectural and implementation differences betwee
 - **Schema Registry**: `RestClient` (Spring 6).
 - **Logic**: Manual poll loop (in `KafkaConsumerService`), manual lag tracking.
 - **Parity**: High. Both implement the "Magic Byte -> Schema ID -> Cache Lookup -> Store Routing" flow identically.
+- **Divergence**: Rust supports `preload_schemas` configuration to fetch specific schema IDs at startup. Java does not yet implement this.
 
 ## 5. API Layer
 

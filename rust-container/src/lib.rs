@@ -5,6 +5,7 @@ use std::{
 };
 
 use apache_avro::Schema;
+use tracing::{error, info};
 use axum_prometheus::metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use dashmap::DashMap;
 
@@ -131,12 +132,30 @@ impl MyState {
             }
         }
 
+        let schema_cache = Arc::new(DashMap::new());
+
+        if let Some(preload_ids) = &config.kafka.preload_schemas {
+            let registry_url = config.kafka.schema_registry_url.as_str();
+            for id in preload_ids {
+                match crate::kafka_utils::fetch_schema_by_id(registry_url, *id).await {
+                    Ok(schema) => {
+                        info!("Preloaded schema ID: {}", id);
+                        schema_cache.insert(*id, schema);
+                    }
+                    Err(e) => {
+                        error!("Failed to preload schema ID {}: {}", id, e);
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
         Ok(MyState {
             config: config.clone(),
             stores: Arc::new(stores),
             routes: config.cache.routes.clone(),
             schema_to_store: Arc::new(schema_to_store),
-            schema_cache: Arc::new(DashMap::new()),
+            schema_cache,
 
             startup_lag_cleared: Arc::new(AtomicBool::new(false)),
 

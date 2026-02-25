@@ -436,6 +436,7 @@ mod tests {
             fetch_metadata_timeout: std::time::Duration::from_secs(5),
             offset_reset: crate::config::KafkaOffsetReset::Earliest,
             force_reset_earliest: false,
+            preload_schemas: None,
         };
 
         let config = MyConfig {

@@ -66,7 +66,8 @@ public class WebConfig {
                     continue;
                 }
 
-                RecordHandler handler = new RecordHandler(store, appConfig, schemaService, metricsService);
+                RecordHandler handler = new RecordHandler(store, appConfig, schemaService, metricsService,
+                        routeDef.getKeyFromBody());
 
                 String fullPath = (basePath + routeDef.getPath()).replace("//", "/");
                 // Ensure fullPath starts with /
@@ -85,6 +86,16 @@ public class WebConfig {
                         .GET("/{id}", handler::getRecord)
                         .DELETE("/{id}", handler::deleteRecord)
                         .POST("/{id}", handler::createRecord));
+
+                if (routeDef.getKeyFromBody() != null && !routeDef.getKeyFromBody().isEmpty()) {
+                    String rawBodyPath = basePath + routeDef.getPath() + "_by_body";
+                    String bodyPath = rawBodyPath.replace("//", "/");
+                    if (!bodyPath.startsWith("/")) {
+                        bodyPath = "/" + bodyPath;
+                    }
+                    logger.info("Mounting body route {} to store {}", bodyPath, routeDef.getStore());
+                    routeBuilder.GET(bodyPath, handler::getRecordByBody);
+                }
             }
         }
 

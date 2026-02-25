@@ -4,8 +4,7 @@
 
 use std::io;
 
-use hamsrs::hamserror::HamsError;
-// use hamsrs::hamserror::HamsError;
+use ::hams::error::HamsError;
 use axum::extract::rejection::JsonRejection;
 use thiserror::Error;
 use tracing_subscriber::filter::FromEnvError;

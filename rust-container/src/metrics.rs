@@ -6,7 +6,7 @@ use tracing::info;
 use crate::MyState;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn prometheus_response(ptr: *const c_void) -> *const c_char {
+pub extern "C" fn prometheus_response(ptr: *const c_void) -> *mut c_char {
     info!("Gathering Prometheus metrics in bill");
 
     let registry = unsafe { &*(ptr as *const Registry) };
@@ -26,7 +26,7 @@ pub extern "C" fn prometheus_response(ptr: *const c_void) -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn prometheus_response_mystate(ptr: *const c_void) -> *const c_char {
+pub extern "C" fn prometheus_response_mystate(ptr: *const c_void) -> *mut c_char {
     let state = unsafe { &*(ptr as *const MyState) };
 
     let encoder = prometheus::TextEncoder::new();

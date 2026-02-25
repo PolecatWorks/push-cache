@@ -26,13 +26,7 @@ FROM buildcache AS buildcacherelease
 RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 
-FROM ghcr.io/polecatworks/hams:main AS sofile
-# This is a dummy stage to get the shared object file
-
 FROM buildcacherelease AS build
-COPY --from=sofile /usr/local/lib/libhams.so /usr/local/lib/
-RUN ldconfig
-ENV RUSTFLAGS="-L /usr/local/lib/"
 COPY . .
 RUN cargo build --release
 
@@ -40,8 +34,6 @@ RUN cargo build --release
 FROM gcr.io/distroless/cc-debian13 AS runtime
 # https://github.com/GoogleContainerTools/distroless
 # FROM gcr.io/distroless/cc-debian12 as runtime
-COPY --from=sofile /usr/local/lib/libhams.so /usr/local/lib/
-ENV LD_LIBRARY_PATH=/usr/local/lib
 COPY --from=build /app/target/release/push-cache /usr/local/bin/
 
 USER nonroot:nonroot

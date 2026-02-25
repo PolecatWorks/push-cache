@@ -304,9 +304,9 @@ async fn get_record_by_body(
     State(state): State<BodyRouteState>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, MyError> {
-    let key_val = body.get(&state.key_field).ok_or_else(|| {
-        MyError::BadRequest(format!("Missing key '{}' in body", state.key_field))
-    })?;
+    let key_val = body
+        .get(&state.key_field)
+        .ok_or_else(|| MyError::BadRequest(format!("Missing key '{}' in body", state.key_field)))?;
 
     let key_string = match key_val {
         serde_json::Value::String(s) => s.clone(),
@@ -440,7 +440,7 @@ mod tests {
         };
 
         let config = MyConfig {
-            hams: hamsrs::hams::config::HamsConfig::default(),
+            hams: ::hams::hams::config::HamsConfig::default(),
             runtime: crate::tokio_tools::ThreadRuntime {
                 threads: 1,
                 stack_size: 1024 * 1024,

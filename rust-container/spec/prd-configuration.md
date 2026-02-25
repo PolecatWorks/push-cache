@@ -72,6 +72,7 @@ The configuration system provides a flexible, layered approach to configuring th
 7.  **Webservice**: `WebServiceConfig` (address, prefix).
 8.  **Kafka**: `MyKafkaConfig` (brokers, topic, group_id, schema_registry, offset policies).
     *   `group_id`: Can be an explicit string OR `{ use_hostname: true }`.
+    *   `preload_schemas`: List of integer Schema IDs to be fetched and cached at startup (optional). Startup will fail if any schema cannot be loaded.
 9.  **Startup Checks**: `StartupCheckConfig` (timeout, fails, enabled).
 10. **Cache**: `CacheConfig` (stores, routes).
     *   `stores`: List of definitions. Each has `name`, `type` (tagged, snake_case), `schemas`.

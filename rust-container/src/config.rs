@@ -206,6 +206,8 @@ pub struct MyKafkaConfig {
     pub offset_reset: KafkaOffsetReset,
     /// Whether to force reset offsets to earliest on startup.
     pub force_reset_earliest: bool,
+    /// Optional list of schema IDs to preload at startup.
+    pub preload_schemas: Option<Vec<u32>>,
 }
 
 impl MyKafkaConfig {
@@ -336,5 +338,36 @@ mod test {
             GroupId::Hostname { use_hostname } => assert!(use_hostname),
             _ => panic!("Expected Hostname variant"),
         }
+    }
+
+    #[test]
+    fn test_preload_schemas_deserialization() {
+        use figment::providers::Format;
+
+        #[derive(Deserialize)]
+        struct ConfigWrapper {
+            preload_schemas: Option<Vec<u32>>,
+        }
+
+        // Test with list of IDs
+        let yaml = r#"
+            preload_schemas: [101, 102, 103]
+        "#;
+        let config: ConfigWrapper = Figment::new().merge(Yaml::string(yaml)).extract().unwrap();
+        assert_eq!(config.preload_schemas.unwrap(), vec![101, 102, 103]);
+
+        // Test empty list
+        let yaml = r#"
+            preload_schemas: []
+        "#;
+        let config: ConfigWrapper = Figment::new().merge(Yaml::string(yaml)).extract().unwrap();
+        assert_eq!(config.preload_schemas.unwrap(), Vec::<u32>::new());
+
+        // Test missing field
+        let yaml = r#"
+            other_field: "value"
+        "#;
+        let config: ConfigWrapper = Figment::new().merge(Yaml::string(yaml)).extract().unwrap();
+        assert!(config.preload_schemas.is_none());
     }
 }

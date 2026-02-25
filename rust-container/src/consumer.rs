@@ -15,7 +15,7 @@ use tracing::{error, info, warn};
 
 use crate::MyState;
 use crate::error::MyError;
-use hamsrs::probes::ProbeManual;
+use ::hams::probe::manual::Manual as ProbeManual;
 
 use rdkafka::TopicPartitionList;
 
@@ -58,9 +58,7 @@ impl ClientContext for ConsumerStatsContext {
                 self.state
                     .startup_lag_cleared
                     .store(true, Ordering::Relaxed);
-                if let Err(e) = self.lag_probe.enable() {
-                    error!("Failed to enable lag probe: {}", e);
-                }
+                self.lag_probe.enable();
             }
         }
     }

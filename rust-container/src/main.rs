@@ -2,8 +2,6 @@ use std::{path::PathBuf, process::ExitCode};
 
 use clap::{Parser, Subcommand};
 
-use ffi_log2::log_param;
-use hamsrs::hams_logger_init;
 use push_cache::config::MyConfig;
 use push_cache::error::MyError;
 use tracing::level_filters::LevelFilter;
@@ -59,13 +57,9 @@ fn main() -> Result<ExitCode, MyError> {
     match args.command {
         Commands::Version => {
             println!("{NAME} Version: :{VERSION}");
-            println!("HaMs Version: {}", hamsrs::hams_version());
         }
         Commands::Start { config, secrets } => {
             info!("Starting {NAME}:{VERSION}");
-            // info!("Starting {}", hamsrs::hams_version());
-
-            hams_logger_init(log_param()).unwrap();
 
             let config_yaml = match std::fs::read_to_string(config.clone()) {
                 Ok(content) => content,
@@ -82,7 +76,7 @@ fn main() -> Result<ExitCode, MyError> {
                     panic!("Config failed to load");
                 });
 
-            debug!("Loaded config {:?}", config);
+            debug!("Loaded config");
 
             service_start(&config)?;
         }
@@ -91,9 +85,9 @@ fn main() -> Result<ExitCode, MyError> {
 
             let config_yaml = std::fs::read_to_string(config.clone())?;
 
-            let config: MyConfig = MyConfig::figment(&config_yaml, secrets).extract()?;
+            let _config: MyConfig = MyConfig::figment(&config_yaml, secrets).extract()?;
 
-            debug!("Loaded config {:#?}", config);
+            debug!("Loaded config successfully");
         }
     }
 

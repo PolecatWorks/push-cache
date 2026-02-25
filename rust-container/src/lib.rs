@@ -5,12 +5,14 @@ use std::{
 };
 
 use apache_avro::Schema;
-use tracing::{error, info};
 use axum_prometheus::metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use dashmap::DashMap;
+use tracing::{error, info};
 
-use hamsrs::Hams;
-use hamsrs::probes::ProbeManual;
+use ::hams::hams::Hams;
+use ::hams::probe::AsyncHealthProbe;
+use ::hams::probe::FFIProbe;
+use ::hams::probe::manual::Manual as ProbeManual;
 use prometheus::{IntCounter, IntGauge, Registry};
 
 use tokio_util::sync::CancellationToken;
@@ -190,34 +192,32 @@ pub async fn service_cancellable(ct: CancellationToken, config: &MyConfig) -> Re
     config.name = NAME.to_owned();
     config.version = VERSION.to_owned();
 
-    let ct_clone = ct.clone();
-
     // Wrapper to allow sending Hams across threads resulting from spawn_blocking
     // This is necessary because Hams potentially contains raw pointers which are !Send
     struct SendHams(Hams);
     unsafe impl Send for SendHams {}
 
     let (hams_wrapper, lag_probe) = tokio::task::spawn_blocking(move || {
-        let hams = Hams::new(ct_clone, &config).unwrap();
+        let mut hams = Hams::new(config);
 
-        let lag_probe = ProbeManual::new("lag-cleared", false).unwrap();
-        hams.ready_insert(lag_probe.clone())?;
-        hams.startup_insert(lag_probe.clone())?;
+        let lag_probe = ProbeManual::new("lag-cleared", false);
+        hams.ready_insert(Box::new(FFIProbe::from(lag_probe.clone())) as Box<dyn AsyncHealthProbe>);
+        hams.startup_insert(
+            Box::new(FFIProbe::from(lag_probe.clone())) as Box<dyn AsyncHealthProbe>
+        );
         Ok::<_, MyError>((SendHams(hams), lag_probe))
     })
     .await
     .map_err(|e| MyError::Message(format!("Tokio join error: {}", e)))??;
 
-    let hams = hams_wrapper.0;
+    let mut hams = hams_wrapper.0;
 
-    unsafe {
-        hams.register_prometheus(
-            // prometheus_response,
-            prometheus_response_mystate,
-            prometheus_response_free,
-            &state as *const _ as *const c_void,
-        )
-    }?;
+    hams.register_prometheus(
+        // prometheus_response,
+        prometheus_response_mystate,
+        prometheus_response_free,
+        &state as *const _ as *const c_void,
+    )?;
 
     hams.start().unwrap();
 

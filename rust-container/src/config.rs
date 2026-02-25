@@ -88,12 +88,12 @@
 //! with secrets stored in a specified directory.
 use std::{path::Path, time::Duration};
 
+use ::hams::hams::config::HamsConfig;
 use figment::{
     Figment,
     providers::{Env, Format, Yaml},
 };
 use figment_file_provider_adapter::FileAdapter;
-use hamsrs::hams::config::HamsConfig;
 use serde::Deserialize;
 use url::Url;
 
@@ -122,7 +122,7 @@ impl From<UrlWithUsernamePassword> for Url {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct MyConfig {
     /// Config of my web service
     pub hams: HamsConfig,

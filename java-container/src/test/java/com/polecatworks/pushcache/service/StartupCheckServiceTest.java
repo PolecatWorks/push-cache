@@ -34,6 +34,8 @@ class StartupCheckServiceTest {
     private Consumer<String, String> kafkaConsumer;
     @Mock
     private CacheFactory cacheFactory;
+    @Mock
+    private SchemaService schemaService;
 
     private StartupCheckService service;
 
@@ -41,7 +43,7 @@ class StartupCheckServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         Function<Properties, Consumer<String, String>> consumerFactory = props -> kafkaConsumer;
-        service = new StartupCheckService(appConfig, restClient, consumerFactory, cacheFactory);
+        service = new StartupCheckService(appConfig, restClient, consumerFactory, cacheFactory, schemaService);
     }
 
     @Test

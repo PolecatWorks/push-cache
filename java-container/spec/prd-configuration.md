@@ -57,7 +57,7 @@ The Java configuration system mirrors the Rust implementation, leveraging Spring
     *   `hams`: `HamsConfig`.
     *   `runtime`: `RuntimeConfig`.
     *   `webservice`: `WebServiceConfig` (`address` as `URI`).
-    *   `kafka`: `KafkaConfig` (`brokers` as `URI`).
+    *   `kafka`: `KafkaConfig` (`brokers` as `URI`, `preloadSchemas` as List of integers).
     *   `startupChecks`: `StartupCheckConfig`.
     *   `cache`: `CacheConfig`.
 

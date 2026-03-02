@@ -32,6 +32,8 @@ public class KafkaConfig {
 
     private boolean useHostnameAsGroupId;
 
+    private java.util.List<Integer> preloadSchemas;
+
     @AssertTrue(message = "Either groupId must be set or useHostnameAsGroupId must be true")
     public boolean isValidGroupId() {
         return (groupId != null && !groupId.isBlank()) || useHostnameAsGroupId;
@@ -107,5 +109,13 @@ public class KafkaConfig {
 
     public void setUseHostnameAsGroupId(boolean useHostnameAsGroupId) {
         this.useHostnameAsGroupId = useHostnameAsGroupId;
+    }
+
+    public java.util.List<Integer> getPreloadSchemas() {
+        return preloadSchemas;
+    }
+
+    public void setPreloadSchemas(java.util.List<Integer> preloadSchemas) {
+        this.preloadSchemas = preloadSchemas;
     }
 }

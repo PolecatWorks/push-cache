@@ -30,17 +30,19 @@ public class StartupCheckService {
     private final RestClient restClient;
     private final Function<Properties, Consumer<String, String>> kafkaConsumerFactory;
     private final CacheFactory cacheFactory;
+    private final SchemaService schemaService;
 
     @Autowired
-    public StartupCheckService(AppConfig appConfig, CacheFactory cacheFactory) {
-        this(appConfig, RestClient.builder().build(), props -> new KafkaConsumer<>(props), cacheFactory);
+    public StartupCheckService(AppConfig appConfig, CacheFactory cacheFactory, SchemaService schemaService) {
+        this(appConfig, RestClient.builder().build(), props -> new KafkaConsumer<>(props), cacheFactory, schemaService);
     }
 
-    public StartupCheckService(AppConfig appConfig, RestClient restClient, Function<Properties, Consumer<String, String>> kafkaConsumerFactory, CacheFactory cacheFactory) {
+    public StartupCheckService(AppConfig appConfig, RestClient restClient, Function<Properties, Consumer<String, String>> kafkaConsumerFactory, CacheFactory cacheFactory, SchemaService schemaService) {
         this.appConfig = appConfig;
         this.restClient = restClient;
         this.kafkaConsumerFactory = kafkaConsumerFactory;
         this.cacheFactory = cacheFactory;
+        this.schemaService = schemaService;
     }
 
     public void runStartupChecks() throws Exception {
@@ -55,6 +57,10 @@ public class StartupCheckService {
             runCheck("Schema Registry Connectivity", checkConfig, this::checkSchemaRegistry)
         );
 
+        CompletableFuture<Void> schemaPreloadCheck = CompletableFuture.runAsync(() ->
+            runCheck("Schema Preloading", checkConfig, this::preloadSchemas)
+        );
+
         CompletableFuture<Void> kafkaCheck = CompletableFuture.runAsync(() ->
             runCheck("Kafka Metadata Connectivity", checkConfig, this::checkKafkaMetadata)
         );
@@ -64,7 +70,7 @@ public class StartupCheckService {
         );
 
         try {
-            CompletableFuture.allOf(schemaRegistryCheck, kafkaCheck, cacheCheck).get();
+            CompletableFuture.allOf(schemaRegistryCheck, schemaPreloadCheck, kafkaCheck, cacheCheck).get();
             logger.info("All startup checks passed.");
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
@@ -118,6 +124,20 @@ public class StartupCheckService {
 
         if (types == null || !types.contains("AVRO")) {
              throw new RuntimeException("Schema type AVRO is not supported by the Schema Registry. Supported types: " + types);
+        }
+    }
+
+    private void preloadSchemas() {
+        List<Integer> schemas = appConfig.getKafka().getPreloadSchemas();
+        if (schemas != null && !schemas.isEmpty()) {
+            logger.info("Preloading {} schemas from configuration", schemas.size());
+            for (Integer id : schemas) {
+                try {
+                    schemaService.getSchema(id);
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to preload schema ID " + id, e);
+                }
+            }
         }
     }
 

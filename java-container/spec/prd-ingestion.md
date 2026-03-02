@@ -32,6 +32,8 @@ The Ingestion layer consumes Avro messages from Kafka, resolves schemas dynamica
 - [ ] If missing, HTTP GET `/schemas/ids/{id}` from Registry.
 - [ ] Parse JSON response -> Extract schema string -> Parse Avro Schema object.
 - [ ] Cache the parsed schema.
+- [ ] Read `kafka.preload_schemas` list from configuration.
+- [ ] Preload specified schemas on startup via StartupCheckService, and halt on failure.
 
 ### US-003: Schema-Based Routing
 **Description:** As a developer, I want to shard data based on its type.

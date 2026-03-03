@@ -8,6 +8,7 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - Implement a thread-safe, high-concurrency in-memory store.
 - Implement a non-blocking Redis store.
 - Implement a non-blocking MongoDB store.
+- Implement a non-blocking Postgres store.
 - Ensure all operations are asynchronous.
 - Support key namespacing (prefixes) for Redis.
 
@@ -50,6 +51,16 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - [ ] `insert` performs an upsert.
 - [ ] `remove` returns the old value via `find_one_and_delete`.
 
+### US-005: Postgres Implementation
+**Description:** As an operator, I want to use Postgres as a persistent relational store cache.
+
+**Acceptance Criteria:**
+- [ ] Use `sqlx` crate with tokio runtime and Postgres driver.
+- [ ] Support `url`, `table_name`, and optional `pool_size` configurations.
+- [ ] Rows stored in a table with a `key` (Text, Primary Key) and `value` (Bytea) column.
+- [ ] `insert` performs an upsert via `ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`.
+- [ ] `remove` returns the old value via `DELETE ... RETURNING value`.
+
 ## 4. Functional Requirements
 
 ### Cache Trait
@@ -78,6 +89,11 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 7.  **Connection**: Use `mongodb::Client` directed at a specific database and collection.
 8.  **Storage Format**: A BSON document containing `key` (String) and `value` (Bson Binary) is stored. The byte array is stored as a generic binary subtype.
 9.  **Error Handling**: Map MongoDB errors to `MyError`.
+
+### PostgresCache
+10. **Connection**: Use `sqlx::PgPool` connected to the specified database URL. The connection pool size defaults to 5.
+11. **Storage Format**: Data is stored in rows within the specified `table_name`, mapping the `key` string to the `value` byte array (`BYTEA` column).
+12. **Error Handling**: Map SQLx errors to `MyError`. Note: the table is NOT created automatically; it must be provisioned externally.
 
 ## 5. Non-Goals
 - TTL (Time To Live) support per key. (Currently not implemented in the trait).

@@ -23,7 +23,7 @@ use crate::{
 
 use metrics::{prometheus_response_free, prometheus_response_mystate};
 
-use crate::cache::{Cache, InMemoryCache, MongoCache, RedisCache};
+use crate::cache::{Cache, InMemoryCache, MongoCache, RedisCache, PostgresCache};
 use crate::startup_tools::run_startup_checks;
 
 pub mod cache;
@@ -123,6 +123,9 @@ impl MyState {
                 }
                 crate::config::StoreType::Mongo(mongo_config) => {
                     Arc::new(MongoCache::new(mongo_config).await?)
+                }
+                crate::config::StoreType::Postgres(postgres_config) => {
+                    Arc::new(PostgresCache::new(postgres_config).await?)
                 }
             };
             stores.insert(store_def.name.clone(), cache);

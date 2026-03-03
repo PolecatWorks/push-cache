@@ -164,6 +164,8 @@ pub enum StoreType {
     Redis(RedisConfig),
     /// MongoDB cache store with specific configuration.
     Mongo(MongoConfig),
+    /// Postgres cache store with specific configuration.
+    Postgres(PostgresConfig),
 }
 
 /// Defines a route that maps a URL path to a specific cache store.
@@ -196,6 +198,17 @@ pub struct MongoConfig {
     pub database: String,
     /// The collection name to use.
     pub collection: String,
+}
+
+/// Configuration for a Postgres cache store.
+#[derive(Deserialize, Debug, Clone)]
+pub struct PostgresConfig {
+    /// The Postgres connection URL.
+    pub url: Url,
+    /// The table name to use.
+    pub table_name: String,
+    /// The pool size to use.
+    pub pool_size: Option<u32>,
 }
 
 /// Configuration for the Kafka consumer.

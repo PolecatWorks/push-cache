@@ -70,7 +70,17 @@ This document highlights the architectural and implementation differences betwee
 - **Serialization**: `apache-avro` (`GenericDatumWriter`) -> JSON Bytes -> HTTP Body.
 - **Parity**: Medium. Java lacks the "Get Record by Body" endpoint (`_by_body` suffix) which was added to Rust for POST-like retrieval of GET resources using a JSON body.
 
-## 6. Summary of Work Remaining
+## 6. Storage Backends (New Divergence)
+
+### Rust
+- Supports `InMemory`, `Redis`, and `Mongo` cache stores.
+- The `Mongo` store persists data as BSON documents.
+
+### Java
+- Currently only supports `IN_MEMORY` and `REDIS` cache stores.
+- **Gap**: The Java implementation needs to add support for a MongoDB backend to reach feature parity.
+
+## 7. Summary of Work Remaining
 To achieve full parity, the Java implementation requires:
 1.  **Hams Upgrade**: Connect the manual `HamsService` endpoints (`/ready`, `/metrics`) to the internal Spring `HealthIndicator` and `MeterRegistry` beans so the sidecar port reports actual status.
 2.  **Redis Async**: (Optional) Consider moving to Spring WebFlux if non-blocking Redis access is required for performance parity under load.

@@ -162,6 +162,8 @@ pub enum StoreType {
     InMemory,
     /// Redis cache store with specific configuration.
     Redis(RedisConfig),
+    /// MongoDB cache store with specific configuration.
+    Mongo(MongoConfig),
 }
 
 /// Defines a route that maps a URL path to a specific cache store.
@@ -183,6 +185,17 @@ pub struct RedisConfig {
     pub url: Url,
     /// Optional prefix for Redis keys.
     pub prefix: Option<String>,
+}
+
+/// Configuration for a Mongo cache store.
+#[derive(Deserialize, Debug, Clone)]
+pub struct MongoConfig {
+    /// The MongoDB connection URL.
+    pub url: Url,
+    /// The database name to use.
+    pub database: String,
+    /// The collection name to use.
+    pub collection: String,
 }
 
 /// Configuration for the Kafka consumer.

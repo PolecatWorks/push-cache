@@ -4,7 +4,14 @@ use prometheus::IntGauge;
 use redis::AsyncCommands;
 use tracing::error;
 
-use crate::config::RedisConfig;
+use bson::doc;
+use futures_util::stream::StreamExt;
+use mongodb::{
+    Client, Collection,
+    options::{ClientOptions, UpdateOptions},
+};
+
+use crate::config::{MongoConfig, RedisConfig};
 use crate::error::MyError;
 
 #[async_trait]
@@ -178,5 +185,115 @@ impl Cache for RedisCache {
             error!("Redis exists error: {e}");
             MyError::Message(format!("Redis exists error: {e}"))
         })
+    }
+}
+
+pub struct MongoCache {
+    collection: Collection<bson::Document>,
+}
+
+impl MongoCache {
+    pub async fn new(config: &MongoConfig) -> Result<Self, MyError> {
+        let client_options = ClientOptions::parse(config.url.as_str())
+            .await
+            .map_err(|e| MyError::Message(format!("Mongo connect error: {e}")))?;
+
+        let client = Client::with_options(client_options)
+            .map_err(|e| MyError::Message(format!("Mongo client error: {e}")))?;
+
+        let database = client.database(&config.database);
+        let collection = database.collection(&config.collection);
+
+        Ok(Self { collection })
+    }
+}
+
+#[async_trait]
+impl Cache for MongoCache {
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, MyError> {
+        let filter = doc! { "key": key };
+        let doc = self.collection.find_one(filter).await.map_err(|e| {
+            error!("Mongo find_one error: {}", e);
+            MyError::Message(format!("Mongo get error: {e}"))
+        })?;
+
+        if let Some(mut d) = doc {
+            #[allow(clippy::collapsible_if)]
+            if let Some(bson::Bson::Binary(b)) = d.get_mut("value") {
+                return Ok(Some(b.bytes.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn insert(&self, key: String, value: Vec<u8>) -> Result<(), MyError> {
+        let filter = doc! { "key": &key };
+        let update = doc! { "$set": { "key": key, "value": bson::Binary { subtype: bson::spec::BinarySubtype::Generic, bytes: value } } };
+        let options = UpdateOptions::builder().upsert(true).build();
+
+        self.collection
+            .update_one(filter, update)
+            .with_options(options)
+            .await
+            .map_err(|e| {
+                error!("Mongo update_one error: {}", e);
+                MyError::Message(format!("Mongo insert error: {e}"))
+            })?;
+
+        Ok(())
+    }
+
+    async fn remove(&self, key: &str) -> Result<Option<Vec<u8>>, MyError> {
+        // Return the old value if possible, similar to Redis GETDEL
+        let filter = doc! { "key": key };
+        let result = self
+            .collection
+            .find_one_and_delete(filter)
+            .await
+            .map_err(|e| {
+                error!("Mongo find_one_and_delete error: {}", e);
+                MyError::Message(format!("Mongo remove error: {e}"))
+            })?;
+
+        if let Some(mut d) = result {
+            #[allow(clippy::collapsible_if)]
+            if let Some(bson::Bson::Binary(b)) = d.get_mut("value") {
+                return Ok(Some(b.bytes.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn keys(&self) -> Result<Vec<String>, MyError> {
+        let mut cursor = self.collection.find(doc! {}).await.map_err(|e| {
+            error!("Mongo find error: {}", e);
+            MyError::Message(format!("Mongo keys error: {e}"))
+        })?;
+
+        let mut keys = Vec::new();
+        while let Some(doc_res) = cursor.next().await {
+            match doc_res {
+                Ok(doc) => {
+                    if let Ok(k) = doc.get_str("key") {
+                        keys.push(k.to_string());
+                    }
+                }
+                Err(e) => {
+                    error!("Mongo cursor next error: {}", e);
+                    return Err(MyError::Message(format!("Mongo iter error: {e}")));
+                }
+            }
+        }
+        Ok(keys)
+    }
+
+    async fn contains_key(&self, key: &str) -> Result<bool, MyError> {
+        let filter = doc! { "key": key };
+        let count = self.collection.count_documents(filter).await.map_err(|e| {
+            error!("Mongo count_documents error: {}", e);
+            MyError::Message(format!("Mongo contains_key error: {e}"))
+        })?;
+
+        Ok(count > 0)
     }
 }

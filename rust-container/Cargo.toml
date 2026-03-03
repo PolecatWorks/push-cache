@@ -49,6 +49,9 @@ schema_registry_converter = { version = "^4.7", features = ["avro", "json", "blo
 redis = { version = "1.0.3", features = ["tokio-comp", "connection-manager"] }
 async-trait = "0.1.89"
 base64 = "0.22.1"
+mongodb = "3.5.1"
+bson = "2.15.0"
+futures-util = "0.3.32"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }

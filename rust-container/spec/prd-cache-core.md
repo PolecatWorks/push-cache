@@ -7,6 +7,7 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - Provide a unified `Cache` trait for all storage backends.
 - Implement a thread-safe, high-concurrency in-memory store.
 - Implement a non-blocking Redis store.
+- Implement a non-blocking MongoDB store.
 - Ensure all operations are asynchronous.
 - Support key namespacing (prefixes) for Redis.
 
@@ -39,6 +40,16 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - [ ] `keys` uses `SCAN` iterator to avoid blocking the Redis server (do not use `KEYS *`).
 - [ ] `get` uses `GET`.
 
+### US-004: MongoDB Implementation
+**Description:** As an operator, I want to use MongoDB as a persistent document store cache.
+
+**Acceptance Criteria:**
+- [ ] Use `mongodb` crate with tokio runtime.
+- [ ] Support `url`, `database`, and `collection` configurations.
+- [ ] Documents stored in the format `{ "key": <String>, "value": <Binary> }`.
+- [ ] `insert` performs an upsert.
+- [ ] `remove` returns the old value via `find_one_and_delete`.
+
 ## 4. Functional Requirements
 
 ### Cache Trait
@@ -62,6 +73,11 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 4.  **Connection**: Use `redis::aio::ConnectionManager` for auto-reconnection and multiplexing.
 5.  **Key Formatting**: If `prefix` is set, all keys sent to Redis are `prefix:key`. Keys returned from `keys()` must have the prefix stripped.
 6.  **Error Handling**: Map Redis errors to `MyError`.
+
+### MongoCache
+7.  **Connection**: Use `mongodb::Client` directed at a specific database and collection.
+8.  **Storage Format**: A BSON document containing `key` (String) and `value` (Bson Binary) is stored. The byte array is stored as a generic binary subtype.
+9.  **Error Handling**: Map MongoDB errors to `MyError`.
 
 ## 5. Non-Goals
 - TTL (Time To Live) support per key. (Currently not implemented in the trait).

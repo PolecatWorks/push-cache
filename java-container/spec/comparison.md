@@ -70,15 +70,15 @@ This document highlights the architectural and implementation differences betwee
 - **Serialization**: `apache-avro` (`GenericDatumWriter`) -> JSON Bytes -> HTTP Body.
 - **Parity**: Medium. Java lacks the "Get Record by Body" endpoint (`_by_body` suffix) which was added to Rust for POST-like retrieval of GET resources using a JSON body.
 
-## 6. Storage Backends (New Divergence)
+## 6. Storage Backends
 
 ### Rust
 - Supports `InMemory`, `Redis`, and `Mongo` cache stores.
 - The `Mongo` store persists data as BSON documents.
 
 ### Java
-- Currently only supports `IN_MEMORY` and `REDIS` cache stores.
-- **Gap**: The Java implementation needs to add support for a MongoDB backend to reach feature parity.
+- Supports `IN_MEMORY`, `REDIS`, and `MONGO` cache stores.
+- The `MONGO` store maps directly to the Rust implementation.
 
 ## 7. Summary of Work Remaining
 To achieve full parity, the Java implementation requires:

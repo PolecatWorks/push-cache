@@ -194,9 +194,12 @@ pub struct MongoCache {
 
 impl MongoCache {
     pub async fn new(config: &MongoConfig) -> Result<Self, MyError> {
-        let client_options = ClientOptions::parse(config.url.as_str())
+        let mut client_options = ClientOptions::parse(config.url.as_str())
             .await
             .map_err(|e| MyError::Message(format!("Mongo connect error: {e}")))?;
+
+        client_options.min_pool_size = config.min_pool_size;
+        client_options.max_pool_size = config.max_pool_size;
 
         let client = Client::with_options(client_options)
             .map_err(|e| MyError::Message(format!("Mongo client error: {e}")))?;

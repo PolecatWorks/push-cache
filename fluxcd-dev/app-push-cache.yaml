@@ -42,13 +42,13 @@ spec:
               - com.polecatworks.billing.Customer
           - name: bills
             type: redis
-            url: redis://localhost:6379
+            url: redis://redis.dev.svc:6379
             prefix: bills
             schemas:
               - com.polecatworks.billing.CustomerBill
           - name: tickets
             type: redis
-            url: redis://localhost:6379
+            url: redis://redis.dev.svc:6379
             prefix: tickets
             schemas:
               - com.polecatworks.billing.SupportTicket

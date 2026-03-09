@@ -2,7 +2,7 @@
 FROM gradle:8.8-jdk21 AS build
 WORKDIR /app
 COPY --chown=gradle:gradle . .
-RUN gradle bootJar --no-daemon
+RUN gradle test bootJar --no-daemon
 
 # Stage 2: Create a custom JRE
 FROM eclipse-temurin:21 AS jre-build

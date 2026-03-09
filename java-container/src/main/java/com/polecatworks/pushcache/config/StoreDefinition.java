@@ -24,6 +24,8 @@ public class StoreDefinition {
     // Mongo specific fields
     private String database;
     private String collection;
+    private Integer minPoolSize;
+    private Integer maxPoolSize;
 
     public String getName() {
         return name;
@@ -79,6 +81,22 @@ public class StoreDefinition {
 
     public void setCollection(String collection) {
         this.collection = collection;
+    }
+
+    public Integer getMinPoolSize() {
+        return minPoolSize;
+    }
+
+    public void setMinPoolSize(Integer minPoolSize) {
+        this.minPoolSize = minPoolSize;
+    }
+
+    public Integer getMaxPoolSize() {
+        return maxPoolSize;
+    }
+
+    public void setMaxPoolSize(Integer maxPoolSize) {
+        this.maxPoolSize = maxPoolSize;
     }
 
     public enum StoreType {

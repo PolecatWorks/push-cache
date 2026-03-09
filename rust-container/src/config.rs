@@ -196,6 +196,10 @@ pub struct MongoConfig {
     pub database: String,
     /// The collection name to use.
     pub collection: String,
+    /// The minimum number of connections in the connection pool.
+    pub min_pool_size: Option<u32>,
+    /// The maximum number of connections in the connection pool.
+    pub max_pool_size: Option<u32>,
 }
 
 /// Configuration for the Kafka consumer.

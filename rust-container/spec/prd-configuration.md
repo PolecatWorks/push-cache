@@ -49,7 +49,7 @@ The configuration system provides a flexible, layered approach to configuring th
 - [ ] `cache.stores` list allows defining `in_memory`, `redis`, and `mongo` stores.
 - [ ] `cache.routes` list allows mapping URL paths to store names, and optionally `key_from_body`.
 - [ ] `redis` store config includes `url` and optional `prefix`.
-- [ ] `mongo` store config includes `url`, `database`, and `collection`.
+- [ ] `mongo` store config includes `url`, `database`, `collection`, `min_pool_size`, and `max_pool_size`.
 
 ## 4. Functional Requirements
 

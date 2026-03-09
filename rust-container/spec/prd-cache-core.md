@@ -45,7 +45,7 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 
 **Acceptance Criteria:**
 - [ ] Use `mongodb` crate with tokio runtime.
-- [ ] Support `url`, `database`, and `collection` configurations.
+- [ ] Support `url`, `database`, `collection`, `min_pool_size`, and `max_pool_size` configurations.
 - [ ] Documents stored in the format `{ "key": <String>, "value": <Binary> }`.
 - [ ] `insert` performs an upsert.
 - [ ] `remove` returns the old value via `find_one_and_delete`.

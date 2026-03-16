@@ -164,6 +164,8 @@ pub enum StoreType {
     Redis(RedisConfig),
     /// MongoDB cache store with specific configuration.
     Mongo(MongoConfig),
+    /// Oracle cache store with specific configuration.
+    Oracle(OracleConfig),
 }
 
 /// Defines a route that maps a URL path to a specific cache store.
@@ -200,6 +202,15 @@ pub struct MongoConfig {
     pub min_pool_size: Option<u32>,
     /// The maximum number of connections in the connection pool.
     pub max_pool_size: Option<u32>,
+}
+
+/// Configuration for an Oracle cache store.
+#[derive(Deserialize, Debug, Clone)]
+pub struct OracleConfig {
+    /// The Oracle connection URL.
+    pub url: UrlWithUsernamePassword,
+    /// The table name to use for this cache store.
+    pub table_name: String,
 }
 
 /// Configuration for the Kafka consumer.

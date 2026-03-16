@@ -52,6 +52,7 @@ base64 = "0.22.1"
 mongodb = "3.5.1"
 bson = "2.15.0"
 futures-util = "0.3.32"
+oracle = "0.6"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }

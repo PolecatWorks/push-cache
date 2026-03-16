@@ -11,8 +11,9 @@ use mongodb::{
     options::{ClientOptions, UpdateOptions},
 };
 
-use crate::config::{MongoConfig, RedisConfig};
+use crate::config::{MongoConfig, OracleConfig, RedisConfig};
 use crate::error::MyError;
+use oracle::pool::PoolBuilder;
 
 #[async_trait]
 pub trait Cache: Send + Sync {
@@ -298,5 +299,195 @@ impl Cache for MongoCache {
         })?;
 
         Ok(count > 0)
+    }
+}
+
+pub struct OracleCache {
+    pool: oracle::pool::Pool,
+    table_name: String,
+}
+
+impl OracleCache {
+    pub fn new(config: &OracleConfig) -> Result<Self, MyError> {
+        // Assume url is something like oracle://host:port/service_name
+        // or just connection string host:port/service_name
+        // Need to parse username/password from the URL if present, or format correctly for oracle crate.
+        let url: url::Url = config.url.clone().into();
+
+        let username = url.username().to_string();
+        let password = url.password().unwrap_or("").to_string();
+
+        // Construct the connection string e.g. //host:port/service_name
+        let mut conn_str = String::new();
+        if let Some(host) = url.host_str() {
+            conn_str.push_str(&format!("//{}", host));
+            if let Some(port) = url.port() {
+                conn_str.push_str(&format!(":{}", port));
+            }
+            conn_str.push_str(url.path());
+        } else {
+            conn_str = url.as_str().to_string();
+        }
+
+        let pool = PoolBuilder::new(username, password, conn_str)
+            .min_connections(1)
+            .max_connections(10)
+            .build()
+            .map_err(|e| MyError::Message(format!("Oracle pool build error: {e}")))?;
+
+        Ok(Self {
+            pool,
+            table_name: config.table_name.clone(),
+        })
+    }
+}
+
+#[async_trait]
+impl Cache for OracleCache {
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, MyError> {
+        let pool = self.pool.clone();
+        let table_name = self.table_name.clone();
+        let key = key.to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<Option<Vec<u8>>, MyError> {
+            let conn = pool
+                .get()
+                .map_err(|e| MyError::Message(format!("Oracle get connection error: {e}")))?;
+            let sql = format!("SELECT v FROM {} WHERE k = :1", table_name);
+            let result: Result<Vec<u8>, _> = conn.query_row_as(&sql, &[&key]);
+
+            match result {
+                Ok(bytes) => Ok(Some(bytes)),
+                #[allow(deprecated)]
+                Err(oracle::Error::NoDataFound) => Ok(None),
+                Err(e) => {
+                    error!("Oracle get error: {}", e);
+                    Err(MyError::Message(format!("Oracle get error: {e}")))
+                }
+            }
+        })
+        .await
+        .map_err(|e| MyError::Message(format!("Tokio spawn_blocking error: {e}")))?
+    }
+
+    async fn insert(&self, key: String, value: Vec<u8>) -> Result<(), MyError> {
+        let pool = self.pool.clone();
+        let table_name = self.table_name.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<(), MyError> {
+            let conn = pool
+                .get()
+                .map_err(|e| MyError::Message(format!("Oracle get connection error: {e}")))?;
+            let sql = format!(
+                "MERGE INTO {} t
+                 USING (SELECT :1 AS k, :2 AS v FROM dual) s
+                 ON (t.k = s.k)
+                 WHEN MATCHED THEN UPDATE SET t.v = s.v
+                 WHEN NOT MATCHED THEN INSERT (k, v) VALUES (s.k, s.v)",
+                table_name
+            );
+
+            conn.execute(&sql, &[&key, &value]).map_err(|e| {
+                error!("Oracle insert error: {}", e);
+                MyError::Message(format!("Oracle insert error: {e}"))
+            })?;
+            conn.commit()
+                .map_err(|e| MyError::Message(format!("Oracle commit error: {e}")))?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| MyError::Message(format!("Tokio spawn_blocking error: {e}")))?
+    }
+
+    async fn remove(&self, key: &str) -> Result<Option<Vec<u8>>, MyError> {
+        let pool = self.pool.clone();
+        let table_name = self.table_name.clone();
+        let key = key.to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<Option<Vec<u8>>, MyError> {
+            let conn = pool
+                .get()
+                .map_err(|e| MyError::Message(format!("Oracle get connection error: {e}")))?;
+
+            // Try to fetch the old value first
+            let fetch_sql = format!("SELECT v FROM {} WHERE k = :1", table_name);
+            let result: Result<Vec<u8>, _> = conn.query_row_as(&fetch_sql, &[&key]);
+
+            let old_value = match result {
+                Ok(bytes) => Some(bytes),
+                #[allow(deprecated)]
+                Err(oracle::Error::NoDataFound) => None,
+                Err(e) => {
+                    error!("Oracle fetch for remove error: {}", e);
+                    return Err(MyError::Message(format!(
+                        "Oracle fetch for remove error: {e}"
+                    )));
+                }
+            };
+
+            let delete_sql = format!("DELETE FROM {} WHERE k = :1", table_name);
+            conn.execute(&delete_sql, &[&key]).map_err(|e| {
+                error!("Oracle delete error: {}", e);
+                MyError::Message(format!("Oracle delete error: {e}"))
+            })?;
+            conn.commit()
+                .map_err(|e| MyError::Message(format!("Oracle commit error: {e}")))?;
+            Ok(old_value)
+        })
+        .await
+        .map_err(|e| MyError::Message(format!("Tokio spawn_blocking error: {e}")))?
+    }
+
+    async fn keys(&self) -> Result<Vec<String>, MyError> {
+        let pool = self.pool.clone();
+        let table_name = self.table_name.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<String>, MyError> {
+            let conn = pool
+                .get()
+                .map_err(|e| MyError::Message(format!("Oracle get connection error: {e}")))?;
+            let sql = format!("SELECT k FROM {}", table_name);
+
+            let mut stmt = conn
+                .statement(&sql)
+                .build()
+                .map_err(|e| MyError::Message(format!("Oracle build statement error: {e}")))?;
+            let rows = stmt
+                .query(&[])
+                .map_err(|e| MyError::Message(format!("Oracle query keys error: {e}")))?;
+
+            let mut keys = Vec::new();
+            for row_result in rows {
+                let row = row_result
+                    .map_err(|e| MyError::Message(format!("Oracle fetch row error: {e}")))?;
+                let key: String = row
+                    .get(0)
+                    .map_err(|e| MyError::Message(format!("Oracle get key error: {e}")))?;
+                keys.push(key);
+            }
+            Ok(keys)
+        })
+        .await
+        .map_err(|e| MyError::Message(format!("Tokio spawn_blocking error: {e}")))?
+    }
+
+    async fn contains_key(&self, key: &str) -> Result<bool, MyError> {
+        let pool = self.pool.clone();
+        let table_name = self.table_name.clone();
+        let key = key.to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<bool, MyError> {
+            let conn = pool
+                .get()
+                .map_err(|e| MyError::Message(format!("Oracle get connection error: {e}")))?;
+            let sql = format!("SELECT COUNT(*) FROM {} WHERE k = :1", table_name);
+            let count: i32 = conn.query_row_as(&sql, &[&key]).map_err(|e| {
+                error!("Oracle contains_key error: {}", e);
+                MyError::Message(format!("Oracle contains_key error: {e}"))
+            })?;
+            Ok(count > 0)
+        })
+        .await
+        .map_err(|e| MyError::Message(format!("Tokio spawn_blocking error: {e}")))?
     }
 }

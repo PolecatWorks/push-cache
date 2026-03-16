@@ -40,6 +40,15 @@ enum Commands {
         #[arg(short, long, value_name = "DIR", default_value = PathBuf::from("secrets").into_os_string())]
         secrets: PathBuf,
     },
+    /// Create schemas for databases (e.g. Oracle) before starting the service
+    CreateSchemas {
+        /// Sets a custom config file
+        #[arg(short, long, value_name = "FILE")]
+        config: PathBuf,
+        /// Sets a custom secrets directory
+        #[arg(short, long, value_name = "DIR", default_value = PathBuf::from("secrets").into_os_string())]
+        secrets: PathBuf,
+    },
 }
 
 fn main() -> Result<ExitCode, MyError> {
@@ -88,6 +97,75 @@ fn main() -> Result<ExitCode, MyError> {
             let _config: MyConfig = MyConfig::figment(&config_yaml, secrets).extract()?;
 
             debug!("Loaded config successfully");
+        }
+        Commands::CreateSchemas { config, secrets } => {
+            info!("Creating schemas for {NAME}:{VERSION}");
+
+            let config_yaml = match std::fs::read_to_string(config.clone()) {
+                Ok(content) => content,
+                Err(e) => {
+                    error!("Failed to read config file {:?}: {}", config, e);
+                    return Err(MyError::Io(e));
+                }
+            };
+
+            let config: MyConfig = MyConfig::figment(&config_yaml, secrets)
+                .extract()
+                .unwrap_or_else(|err| {
+                    error!("Config file {config:?} failed with error \n{err:#?}");
+                    panic!("Config failed to load");
+                });
+
+            for store_def in &config.cache.stores {
+                if let push_cache::config::StoreType::Oracle(oracle_config) = &store_def.store_type
+                {
+                    info!(
+                        "Creating table {} for Oracle store {}",
+                        oracle_config.table_name, store_def.name
+                    );
+
+                    let url: url::Url = oracle_config.url.clone().into();
+                    let username = url.username().to_string();
+                    let password = url.password().unwrap_or("").to_string();
+
+                    let mut conn_str = String::new();
+                    if let Some(host) = url.host_str() {
+                        conn_str.push_str(&format!("//{}", host));
+                        if let Some(port) = url.port() {
+                            conn_str.push_str(&format!(":{}", port));
+                        }
+                        conn_str.push_str(url.path());
+                    } else {
+                        conn_str = url.as_str().to_string();
+                    }
+
+                    let conn = oracle::Connection::connect(&username, &password, &conn_str)
+                        .map_err(|e| MyError::Message(format!("Oracle connect error: {e}")))?;
+
+                    let sql = format!(
+                        "CREATE TABLE {} (k VARCHAR2(255) PRIMARY KEY, v BLOB)",
+                        oracle_config.table_name
+                    );
+
+                    match conn.execute(&sql, &[]) {
+                        Ok(_) => info!("Successfully created table {}", oracle_config.table_name),
+                        Err(e) => {
+                            if let Some(db_err) = e.db_error() {
+                                if db_err.code() == 955 {
+                                    info!("Table {} already exists", oracle_config.table_name);
+                                    continue;
+                                }
+                            }
+                            error!("Failed to create table {}: {}", oracle_config.table_name, e);
+                            return Err(MyError::Message(format!(
+                                "Oracle create table error: {e}"
+                            )));
+                        }
+                    }
+                }
+            }
+
+            info!("Finished creating schemas");
         }
     }
 

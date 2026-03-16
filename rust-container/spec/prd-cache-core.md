@@ -8,6 +8,7 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - Implement a thread-safe, high-concurrency in-memory store.
 - Implement a non-blocking Redis store.
 - Implement a non-blocking MongoDB store.
+- Implement a non-blocking Oracle store using spawn_blocking.
 - Ensure all operations are asynchronous.
 - Support key namespacing (prefixes) for Redis.
 
@@ -50,6 +51,16 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - [ ] `insert` performs an upsert.
 - [ ] `remove` returns the old value via `find_one_and_delete`.
 
+### US-005: Oracle Implementation
+**Description:** As an operator, I want to use an Oracle database as a persistent cache backend.
+
+**Acceptance Criteria:**
+- [ ] Use `oracle` crate with synchronous calls wrapped in `tokio::task::spawn_blocking`.
+- [ ] Support `url` and `table_name` configurations.
+- [ ] Keys are stored as `VARCHAR2(255)` (Primary Key) and values as `BLOB`.
+- [ ] `insert` performs an upsert using `MERGE INTO`.
+- [ ] Add CLI subcommand `create-schemas` to automatically create the configured Oracle tables before the service runs.
+
 ## 4. Functional Requirements
 
 ### Cache Trait
@@ -78,6 +89,11 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 7.  **Connection**: Use `mongodb::Client` directed at a specific database and collection.
 8.  **Storage Format**: A BSON document containing `key` (String) and `value` (Bson Binary) is stored. The byte array is stored as a generic binary subtype.
 9.  **Error Handling**: Map MongoDB errors to `MyError`.
+
+### OracleCache
+10. **Connection**: Use `oracle::pool::ConnectionPool` for connection multiplexing.
+11. **Storage Format**: Data is stored in rows with `k` (VARCHAR2) and `v` (BLOB).
+12. **Asynchronous Wrapper**: All synchronous Oracle interactions must run via `tokio::task::spawn_blocking` to prevent blocking the tokio runtime.
 
 ## 5. Non-Goals
 - TTL (Time To Live) support per key. (Currently not implemented in the trait).

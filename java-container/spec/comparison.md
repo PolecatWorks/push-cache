@@ -73,6 +73,15 @@ This document highlights the architectural and implementation differences betwee
 ## 6. Storage Backends (New Divergence)
 
 ### Rust
+
+- Supports `InMemory`, `Redis`, `Mongo`, and `Oracle` cache stores.
+- The `Mongo` store persists data as BSON documents.
+- The `Oracle` store persists data as BLOBs with a VARCHAR2 primary key.
+
+### Java
+- Currently only supports `IN_MEMORY` and `REDIS` cache stores.
+- **Gap**: The Java implementation needs to add support for MongoDB and Oracle backends to reach feature parity.
+
 - Supports `InMemory`, `Redis`, `Mongo`, and `Postgres` cache stores.
 - The `Mongo` store persists data as BSON documents.
 - The `Postgres` store persists data in a relational table using `sqlx`.
@@ -80,6 +89,7 @@ This document highlights the architectural and implementation differences betwee
 ### Java
 - Currently only supports `IN_MEMORY` and `REDIS` cache stores.
 - **Gap**: The Java implementation needs to add support for a MongoDB and Postgres backend to reach feature parity.
+
 
 ## 7. Summary of Work Remaining
 To achieve full parity, the Java implementation requires:

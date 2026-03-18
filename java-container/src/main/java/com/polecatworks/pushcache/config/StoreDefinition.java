@@ -17,9 +17,15 @@ public class StoreDefinition {
 
     private List<String> schemas;
 
-    // Redis specific fields
+    // Redis and Mongo specific fields
     private URI url;
     private String prefix;
+
+    // Mongo specific fields
+    private String database;
+    private String collection;
+    private Integer minPoolSize;
+    private Integer maxPoolSize;
 
     public String getName() {
         return name;
@@ -61,10 +67,44 @@ public class StoreDefinition {
         this.prefix = prefix;
     }
 
+    public String getDatabase() {
+        return database;
+    }
+
+    public void setDatabase(String database) {
+        this.database = database;
+    }
+
+    public String getCollection() {
+        return collection;
+    }
+
+    public void setCollection(String collection) {
+        this.collection = collection;
+    }
+
+    public Integer getMinPoolSize() {
+        return minPoolSize;
+    }
+
+    public void setMinPoolSize(Integer minPoolSize) {
+        this.minPoolSize = minPoolSize;
+    }
+
+    public Integer getMaxPoolSize() {
+        return maxPoolSize;
+    }
+
+    public void setMaxPoolSize(Integer maxPoolSize) {
+        this.maxPoolSize = maxPoolSize;
+    }
+
     public enum StoreType {
         @JsonProperty("in_memory")
         IN_MEMORY,
         @JsonProperty("redis")
-        REDIS
+        REDIS,
+        @JsonProperty("mongo")
+        MONGO
     }
 }

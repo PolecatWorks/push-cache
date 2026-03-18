@@ -8,7 +8,11 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - Implement a thread-safe, high-concurrency in-memory store.
 - Implement a non-blocking Redis store.
 - Implement a non-blocking MongoDB store.
+
+- Implement a non-blocking Oracle store using spawn_blocking.
+
 - Implement a non-blocking Postgres store.
+
 - Ensure all operations are asynchronous.
 - Support key namespacing (prefixes) for Redis.
 
@@ -46,10 +50,21 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 
 **Acceptance Criteria:**
 - [ ] Use `mongodb` crate with tokio runtime.
-- [ ] Support `url`, `database`, and `collection` configurations.
+- [ ] Support `url`, `database`, `collection`, `min_pool_size`, and `max_pool_size` configurations.
 - [ ] Documents stored in the format `{ "key": <String>, "value": <Binary> }`.
 - [ ] `insert` performs an upsert.
 - [ ] `remove` returns the old value via `find_one_and_delete`.
+
+
+### US-005: Oracle Implementation
+**Description:** As an operator, I want to use an Oracle database as a persistent cache backend.
+
+**Acceptance Criteria:**
+- [ ] Use `oracle` crate with synchronous calls wrapped in `tokio::task::spawn_blocking`.
+- [ ] Support `url` and `table_name` configurations.
+- [ ] Keys are stored as `VARCHAR2(255)` (Primary Key) and values as `BLOB`.
+- [ ] `insert` performs an upsert using `MERGE INTO`.
+- [ ] Add CLI subcommand `create-schemas` to automatically create the configured Oracle tables before the service runs.
 
 ### US-005: Postgres Implementation
 **Description:** As an operator, I want to use Postgres as a persistent relational store cache.
@@ -60,6 +75,7 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - [ ] Rows stored in a table with a `key` (Text, Primary Key) and `value` (Bytea) column.
 - [ ] `insert` performs an upsert via `ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`.
 - [ ] `remove` returns the old value via `DELETE ... RETURNING value`.
+
 
 ## 4. Functional Requirements
 
@@ -90,10 +106,17 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 8.  **Storage Format**: A BSON document containing `key` (String) and `value` (Bson Binary) is stored. The byte array is stored as a generic binary subtype.
 9.  **Error Handling**: Map MongoDB errors to `MyError`.
 
+
+### OracleCache
+10. **Connection**: Use `oracle::pool::ConnectionPool` for connection multiplexing.
+11. **Storage Format**: Data is stored in rows with `k` (VARCHAR2) and `v` (BLOB).
+12. **Asynchronous Wrapper**: All synchronous Oracle interactions must run via `tokio::task::spawn_blocking` to prevent blocking the tokio runtime.
+
 ### PostgresCache
 10. **Connection**: Use `sqlx::PgPool` connected to the specified database URL. The connection pool size defaults to 5.
 11. **Storage Format**: Data is stored in rows within the specified `table_name`, mapping the `key` string to the `value` byte array (`BYTEA` column).
 12. **Error Handling**: Map SQLx errors to `MyError`. Note: the table is NOT created automatically; it must be provisioned externally.
+
 
 ## 5. Non-Goals
 - TTL (Time To Live) support per key. (Currently not implemented in the trait).

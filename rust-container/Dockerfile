@@ -2,6 +2,20 @@
 # RUN cargo install cargo-chef
 FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 
+# Install Oracle Instant Client dependencies and the client itself
+# cargo-chef on debian might use an older debian base so we try both libaio1t64 and libaio1
+RUN apt-get update && apt-get install -y wget unzip && \
+    (apt-get install -y libaio1t64 || apt-get install -y libaio1) && \
+    mkdir -p /opt/oracle && \
+    cd /opt/oracle && \
+    wget https://download.oracle.com/otn_software/linux/instantclient/1922000/instantclient-basiclite-linux.x64-19.22.0.0.0dbru.zip && \
+    unzip instantclient-basiclite-linux.x64-19.22.0.0.0dbru.zip && \
+    rm instantclient-basiclite-linux.x64-19.22.0.0.0dbru.zip && \
+    sh -c "echo /opt/oracle/instantclient_19_22 > /etc/ld.so.conf.d/oracle-instantclient.conf" && \
+    ldconfig
+
+ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_19_22:$LD_LIBRARY_PATH
+
 WORKDIR /app
 
 FROM chef AS planner
@@ -32,12 +46,16 @@ RUN cargo test
 RUN cargo build --release
 
 # We do not need the Rust toolchain to run the binary!
-FROM gcr.io/distroless/cc-debian13 AS runtime
-# https://github.com/GoogleContainerTools/distroless
-# FROM gcr.io/distroless/cc-debian12 as runtime
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && (apt-get install -y libaio1t64 || apt-get install -y libaio1) && rm -rf /var/lib/apt/lists/*
+COPY --from=chef /opt/oracle /opt/oracle
+RUN sh -c "echo /opt/oracle/instantclient_19_22 > /etc/ld.so.conf.d/oracle-instantclient.conf" && ldconfig
+ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_19_22:$LD_LIBRARY_PATH
+
 COPY --from=build /app/target/release/push-cache /usr/local/bin/
 
-USER nonroot:nonroot
+# USER nonroot:nonroot
 # COPY entrypoint.sh /
 ENTRYPOINT ["/usr/local/bin/push-cache"]
 # CMD ["-l", "sample01", "start"]

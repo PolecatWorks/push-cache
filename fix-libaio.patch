@@ -1,0 +1,19 @@
+--- rust-container/Dockerfile
++++ rust-container/Dockerfile
+@@ -4,7 +4,7 @@
+
+ # Install Oracle Instant Client dependencies and the client itself
+-RUN apt-get update && apt-get install -y libaio1 wget unzip && \
++RUN apt-get update && apt-get install -y libaio1t64 wget unzip && \
+     mkdir -p /opt/oracle && \
+     cd /opt/oracle && \
+     wget https://download.oracle.com/otn_software/linux/instantclient/1922000/instantclient-basiclite-linux.x64-19.22.0.0.0dbru.zip && \
+@@ -46,7 +46,7 @@
+ # We do not need the Rust toolchain to run the binary!
+ FROM debian:bookworm-slim AS runtime
+
+-RUN apt-get update && apt-get install -y libaio1 && rm -rf /var/lib/apt/lists/*
++RUN apt-get update && apt-get install -y libaio1t64 && rm -rf /var/lib/apt/lists/*
+ COPY --from=chef /opt/oracle /opt/oracle
+ RUN sh -c "echo /opt/oracle/instantclient_19_22 > /etc/ld.so.conf.d/oracle-instantclient.conf" && ldconfig
+ ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_19_22:$LD_LIBRARY_PATH

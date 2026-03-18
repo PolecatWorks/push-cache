@@ -92,8 +92,13 @@ compose-redis:
 compose-mongodb:
 	docker compose -f docker-compose/mongodb.yaml up
 
+
+compose-oracle:
+	docker compose -f docker-compose/oracle.yaml up
+
 compose-postgres:
 	docker compose -f docker-compose/postgres.yaml up
+
 
 compose-kafka-zk:
 	docker compose -f docker-compose/kafka-zk.yaml up

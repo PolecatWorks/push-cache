@@ -35,6 +35,14 @@ public class CacheFactory implements DisposableBean {
                         logger.error("Failed to initialize Redis store: {}", storeDef.getName(), e);
                         throw new RuntimeException("Failed to initialize Redis store: " + storeDef.getName(), e);
                     }
+                } else if (storeDef.getType() == StoreDefinition.StoreType.MONGO) {
+                    try {
+                        stores.put(storeDef.getName(), new MongoCache(storeDef));
+                        logger.info("Initialized Mongo store: {}", storeDef.getName());
+                    } catch (Exception e) {
+                        logger.error("Failed to initialize Mongo store: {}", storeDef.getName(), e);
+                        throw new RuntimeException("Failed to initialize Mongo store: " + storeDef.getName(), e);
+                    }
                 }
 
                 // Map Schemas to Store

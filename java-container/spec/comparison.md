@@ -78,10 +78,12 @@ This document highlights the architectural and implementation differences betwee
 - The `Oracle` store persists data as BLOBs with a VARCHAR2 primary key.
 
 ### Java
-- Currently only supports `IN_MEMORY` and `REDIS` cache stores.
-- **Gap**: The Java implementation needs to add support for MongoDB and Oracle backends to reach feature parity.
+- Currently supports `IN_MEMORY`, `REDIS`, and `MONGO` cache stores.
+- The `MONGO` store persists data as BSON documents matching the Rust implementation.
+- **Gap**: The Java implementation needs to add support for the Oracle backend to reach full feature parity.
 
 ## 7. Summary of Work Remaining
 To achieve full parity, the Java implementation requires:
-1.  **Hams Upgrade**: Connect the manual `HamsService` endpoints (`/ready`, `/metrics`) to the internal Spring `HealthIndicator` and `MeterRegistry` beans so the sidecar port reports actual status.
-2.  **Redis Async**: (Optional) Consider moving to Spring WebFlux if non-blocking Redis access is required for performance parity under load.
+1.  **Oracle Backend Support**: Implement the `OracleCache` class and backend handling.
+2.  **Hams Upgrade**: Connect the manual `HamsService` endpoints (`/ready`, `/metrics`) to the internal Spring `HealthIndicator` and `MeterRegistry` beans so the sidecar port reports actual status.
+3.  **Redis Async**: (Optional) Consider moving to Spring WebFlux if non-blocking Redis access is required for performance parity under load.

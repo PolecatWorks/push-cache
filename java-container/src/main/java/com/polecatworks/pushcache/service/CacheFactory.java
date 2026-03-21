@@ -43,6 +43,14 @@ public class CacheFactory implements DisposableBean {
                         logger.error("Failed to initialize Mongo store: {}", storeDef.getName(), e);
                         throw new RuntimeException("Failed to initialize Mongo store: " + storeDef.getName(), e);
                     }
+                } else if (storeDef.getType() == StoreDefinition.StoreType.ORACLE) {
+                    try {
+                        stores.put(storeDef.getName(), new OracleCache(storeDef));
+                        logger.info("Initialized Oracle store: {}", storeDef.getName());
+                    } catch (Exception e) {
+                        logger.error("Failed to initialize Oracle store: {}", storeDef.getName(), e);
+                        throw new RuntimeException("Failed to initialize Oracle store: " + storeDef.getName(), e);
+                    }
                 }
 
                 // Map Schemas to Store

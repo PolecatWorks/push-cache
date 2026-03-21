@@ -8,6 +8,7 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 - Implement a thread-safe `InMemoryCache`.
 - Implement a `RedisCache` using Spring Data Redis.
 - Implement a `MongoCache` matching the Rust implementation's BSON document structure.
+- Implement an `OracleCache` using standard JDBC matching the Rust application's BLOB/VARCHAR2 schema.
 - Support store configuration via `StoreDefinition`.
 - Support key namespacing for Redis.
 
@@ -51,6 +52,16 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 - [ ] `checkHealth()` performs a `ping` against the `admin` database.
 - [ ] Implement `AutoCloseable` to clean up `MongoClient` connections.
 
+### US-005: Oracle Implementation
+**Description:** As an operator, I want to use an Oracle database as a persistent cache backend to match Rust capabilities.
+
+**Acceptance Criteria:**
+- [ ] Use `ojdbc11` and Spring's `JdbcTemplate` with a `HikariDataSource`.
+- [ ] Support `url` and `tableName` configurations.
+- [ ] Keys are stored as `VARCHAR2(255)` (Primary Key) and values as `BLOB`.
+- [ ] `insert` performs an upsert using `MERGE INTO`.
+- [ ] Add CLI subcommand `create-schemas` to automatically create the configured Oracle tables before the service runs using JDBC.
+
 ## 4. Functional Requirements
 
 ### Cache Interface
@@ -82,6 +93,12 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 8.  **Connection**: `MongoClient` from `com.mongodb.client.MongoClients`.
 9.  **Format**: Stores items in the target collection identically to the Rust equivalent (`"key"` is String, `"value"` is `org.bson.types.Binary`).
 10. **Listing**: Standard cursor-based document enumeration.
+
+### OracleCache
+11. **Connection**: `HikariDataSource` with `JdbcTemplate`.
+12. **Format**: Data is stored in rows with `k` (VARCHAR2) and `v` (BLOB).
+13. **Sync**: All Oracle interactions run synchronously, matching the application's overall web server model.
+14. **Management**: The `create-schemas` CLI command handles automatic setup.
 
 ## 5. Non-Goals
 - TTL support per key (not in interface).

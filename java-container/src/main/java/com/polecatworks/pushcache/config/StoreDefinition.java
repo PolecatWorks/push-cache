@@ -27,6 +27,9 @@ public class StoreDefinition {
     private Integer minPoolSize;
     private Integer maxPoolSize;
 
+    // Oracle specific fields
+    private String tableName;
+
     public String getName() {
         return name;
     }
@@ -99,12 +102,22 @@ public class StoreDefinition {
         this.maxPoolSize = maxPoolSize;
     }
 
+    public String getTableName() {
+        return tableName;
+    }
+
+    public void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
+
     public enum StoreType {
         @JsonProperty("in_memory")
         IN_MEMORY,
         @JsonProperty("redis")
         REDIS,
         @JsonProperty("mongo")
-        MONGO
+        MONGO,
+        @JsonProperty("oracle")
+        ORACLE
     }
 }

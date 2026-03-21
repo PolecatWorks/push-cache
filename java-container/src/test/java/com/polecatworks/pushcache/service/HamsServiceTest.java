@@ -2,17 +2,14 @@ package com.polecatworks.pushcache.service;
 
 import com.polecatworks.pushcache.config.AppConfig;
 import com.polecatworks.pushcache.config.HamsConfig;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.actuate.health.Health;
-import org.springframework.boot.actuate.health.Status;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -20,50 +17,76 @@ import java.net.http.HttpResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class HamsServiceTest {
 
-    private AppConfig appConfig;
-    private LagClearedHealthIndicator lagHealthIndicator;
-    private CacheHealthIndicator cacheHealthIndicator;
-    private PrometheusMeterRegistry meterRegistry;
     private HamsService hamsService;
     private HttpClient httpClient;
+    private int port;
+
+    // Create actual dummy instances instead of Mockito mocks to avoid cross-thread mock state issues
+    private volatile boolean lagIsUp = true;
+    private volatile boolean cacheIsUp = true;
+    private volatile String prometheusScrape = "# HELP test\n# TYPE test gauge\ntest 1.0";
 
     @BeforeEach
-    void setUp() {
-        appConfig = new AppConfig();
+    void setUp() throws IOException, InterruptedException {
+        // Find a random free port
+        try (ServerSocket socket = new ServerSocket(0)) {
+            port = socket.getLocalPort();
+        }
+
+        AppConfig appConfig = new AppConfig();
         HamsConfig hamsConfig = new HamsConfig();
-        hamsConfig.setAddress("localhost:8079");
+        hamsConfig.setAddress("localhost:" + port);
         hamsConfig.setPrefix("hams");
         appConfig.setHams(hamsConfig);
 
-        lagHealthIndicator = mock(LagClearedHealthIndicator.class);
-        cacheHealthIndicator = mock(CacheHealthIndicator.class);
-        meterRegistry = mock(PrometheusMeterRegistry.class);
+        lagIsUp = true;
+        cacheIsUp = true;
 
-        // Reset before each test properly!
-        when(lagHealthIndicator.health()).thenReturn(Health.up().build());
-        when(cacheHealthIndicator.health()).thenReturn(Health.up().build());
-        when(meterRegistry.scrape()).thenReturn("# HELP test\n# TYPE test gauge\ntest 1.0");
+        LagClearedHealthIndicator lagHealthIndicator = new LagClearedHealthIndicator() {
+            @Override
+            public Health health() {
+                return lagIsUp ? Health.up().build() : Health.down().build();
+            }
+        };
+
+        // Needs to implement CacheHealthIndicator specifically (though since we override health() it's fine)
+        CacheHealthIndicator cacheHealthIndicator = new CacheHealthIndicator(null) {
+            @Override
+            public Health health() {
+                return cacheIsUp ? Health.up().build() : Health.down().build();
+            }
+        };
+
+        PrometheusMeterRegistry meterRegistry = new PrometheusMeterRegistry(io.micrometer.prometheusmetrics.PrometheusConfig.DEFAULT) {
+            @Override
+            public String scrape() {
+                return prometheusScrape;
+            }
+        };
 
         hamsService = new HamsService(appConfig, lagHealthIndicator, cacheHealthIndicator, meterRegistry);
         hamsService.startServer();
 
         httpClient = HttpClient.newHttpClient();
+
+        // Give server a tiny bit of time to bind properly
+        Thread.sleep(50);
     }
 
     @AfterEach
     void tearDown() {
-        hamsService.destroy();
+        if (hamsService != null) {
+            hamsService.destroy();
+        }
     }
 
     @Test
     void testAliveEndpoint() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8079/hams/alive"))
+                .uri(URI.create("http://localhost:" + port + "/hams/alive"))
                 .GET()
                 .build();
 
@@ -74,11 +97,11 @@ class HamsServiceTest {
 
     @Test
     void testReadyEndpoint_Healthy() throws IOException, InterruptedException {
-        when(lagHealthIndicator.health()).thenReturn(Health.up().build());
-        when(cacheHealthIndicator.health()).thenReturn(Health.up().build());
+        lagIsUp = true;
+        cacheIsUp = true;
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8079/hams/ready"))
+                .uri(URI.create("http://localhost:" + port + "/hams/ready"))
                 .GET()
                 .build();
 
@@ -89,11 +112,11 @@ class HamsServiceTest {
 
     @Test
     void testReadyEndpoint_UnhealthyLag() throws IOException, InterruptedException {
-        when(lagHealthIndicator.health()).thenReturn(Health.down().build());
-        when(cacheHealthIndicator.health()).thenReturn(Health.up().build());
+        lagIsUp = false;
+        cacheIsUp = true;
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8079/hams/ready"))
+                .uri(URI.create("http://localhost:" + port + "/hams/ready"))
                 .GET()
                 .build();
 
@@ -104,11 +127,11 @@ class HamsServiceTest {
 
     @Test
     void testReadyEndpoint_UnhealthyCache() throws IOException, InterruptedException {
-        when(lagHealthIndicator.health()).thenReturn(Health.up().build());
-        when(cacheHealthIndicator.health()).thenReturn(Health.down().build());
+        lagIsUp = true;
+        cacheIsUp = false;
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8079/hams/ready"))
+                .uri(URI.create("http://localhost:" + port + "/hams/ready"))
                 .GET()
                 .build();
 
@@ -119,10 +142,10 @@ class HamsServiceTest {
 
     @Test
     void testStartupEndpoint_Healthy() throws IOException, InterruptedException {
-        when(cacheHealthIndicator.health()).thenReturn(Health.up().build());
+        cacheIsUp = true;
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8079/hams/startup"))
+                .uri(URI.create("http://localhost:" + port + "/hams/startup"))
                 .GET()
                 .build();
 
@@ -133,10 +156,10 @@ class HamsServiceTest {
 
     @Test
     void testStartupEndpoint_UnhealthyCache() throws IOException, InterruptedException {
-        when(cacheHealthIndicator.health()).thenReturn(Health.down().build());
+        cacheIsUp = false;
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8079/hams/startup"))
+                .uri(URI.create("http://localhost:" + port + "/hams/startup"))
                 .GET()
                 .build();
 
@@ -147,10 +170,10 @@ class HamsServiceTest {
 
     @Test
     void testMetricsEndpoint() throws IOException, InterruptedException {
-        when(meterRegistry.scrape()).thenReturn("# HELP test\n# TYPE test gauge\ntest 1.0");
+        prometheusScrape = "# HELP test\n# TYPE test gauge\ntest 1.0";
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8079/hams/metrics"))
+                .uri(URI.create("http://localhost:" + port + "/hams/metrics"))
                 .GET()
                 .build();
 

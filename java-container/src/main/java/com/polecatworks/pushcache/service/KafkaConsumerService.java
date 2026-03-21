@@ -172,7 +172,7 @@ public class KafkaConsumerService {
         if (value == null) {
             // Tombstone
             if (key != null) {
-                cacheFactory.getAllStores().forEach(store -> store.remove(key));
+                cacheFactory.getAllStores().forEach(store -> store.remove(key).block());
                 metricsService.incrementTombstonesProcessed();
                 logger.debug("Removed record for key: {}", key);
             }
@@ -197,7 +197,7 @@ public class KafkaConsumerService {
 
             if (store != null) {
                 if (key != null) {
-                    store.put(key, value);
+                    store.put(key, value).block();
                     metricsService.incrementUpdatesReceived();
                 }
             } else {

@@ -1,6 +1,8 @@
 package com.polecatworks.pushcache.service;
 
-import java.util.Set;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.Map;
@@ -23,44 +25,50 @@ public class InMemoryCache implements Cache {
     }
 
     @Override
-    public void put(String key, byte[] value) {
-        if (store.put(key, value) == null) {
-            size.incrementAndGet();
-        }
+    public Mono<Void> put(String key, byte[] value) {
+        return Mono.fromRunnable(() -> {
+            if (store.put(key, value) == null) {
+                size.incrementAndGet();
+            }
+        });
     }
 
     @Override
-    public byte[] get(String key) {
-        return store.get(key);
+    public Mono<byte[]> get(String key) {
+        return Mono.justOrEmpty(store.get(key));
     }
 
     @Override
-    public byte[] remove(String key) {
-        byte[] val = store.remove(key);
-        if (val != null) {
-            size.decrementAndGet();
-        }
-        return val;
+    public Mono<byte[]> remove(String key) {
+        return Mono.fromCallable(() -> {
+            byte[] val = store.remove(key);
+            if (val != null) {
+                size.decrementAndGet();
+            }
+            return val;
+        });
     }
 
     @Override
-    public Set<String> getKeys() {
-        return store.keySet();
+    public Flux<String> getKeys() {
+        return Flux.fromIterable(store.keySet());
     }
 
     @Override
-    public boolean containsKey(String key) {
-        return store.containsKey(key);
+    public Mono<Boolean> containsKey(String key) {
+        return Mono.just(store.containsKey(key));
     }
 
     @Override
-    public void clear() {
-        store.clear();
-        size.set(0);
+    public Mono<Void> clear() {
+        return Mono.fromRunnable(() -> {
+            store.clear();
+            size.set(0);
+        });
     }
 
     @Override
-    public void checkHealth() throws Exception {
-        // Always healthy
+    public Mono<Void> checkHealth() {
+        return Mono.empty();
     }
 }

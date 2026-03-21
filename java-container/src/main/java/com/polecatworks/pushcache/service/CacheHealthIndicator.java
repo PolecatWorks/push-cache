@@ -23,7 +23,7 @@ public class CacheHealthIndicator implements HealthIndicator {
 
         for (Cache cache : cacheFactory.getAllStores()) {
             try {
-                cache.checkHealth();
+                cache.checkHealth().block();
                 details.put(cache.getName(), "UP");
             } catch (Exception e) {
                 allHealthy = false;

@@ -13,9 +13,9 @@ import org.bson.conversions.Bson;
 import org.bson.types.Binary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.HashSet;
-import java.util.Set;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 public class MongoCache implements Cache, AutoCloseable {
 
@@ -55,90 +55,102 @@ public class MongoCache implements Cache, AutoCloseable {
     }
 
     @Override
-    public void put(String key, byte[] value) {
-        try {
-            Bson filter = Filters.eq("key", key);
-            Bson update = Updates.combine(
-                    Updates.set("key", key),
-                    Updates.set("value", new Binary(value))
-            );
-            UpdateOptions options = new UpdateOptions().upsert(true);
-            collection.updateOne(filter, update, options);
-        } catch (Exception e) {
-            logger.error("Mongo insert error for key {}: {}", key, e.getMessage(), e);
-            throw new RuntimeException("Mongo insert error", e);
-        }
-    }
-
-    @Override
-    public byte[] get(String key) {
-        try {
-            Document doc = collection.find(Filters.eq("key", key)).first();
-            if (doc != null && doc.get("value") instanceof Binary) {
-                return ((Binary) doc.get("value")).getData();
+    public Mono<Void> put(String key, byte[] value) {
+        return Mono.fromRunnable(() -> {
+            try {
+                Bson filter = Filters.eq("key", key);
+                Bson update = Updates.combine(
+                        Updates.set("key", key),
+                        Updates.set("value", new Binary(value))
+                );
+                UpdateOptions options = new UpdateOptions().upsert(true);
+                collection.updateOne(filter, update, options);
+            } catch (Exception e) {
+                logger.error("Mongo insert error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Mongo insert error", e);
             }
-            return null;
-        } catch (Exception e) {
-            logger.error("Mongo get error for key {}: {}", key, e.getMessage(), e);
-            throw new RuntimeException("Mongo get error", e);
-        }
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     @Override
-    public byte[] remove(String key) {
-        try {
-            Document doc = collection.findOneAndDelete(Filters.eq("key", key));
-            if (doc != null && doc.get("value") instanceof Binary) {
-                return ((Binary) doc.get("value")).getData();
-            }
-            return null;
-        } catch (Exception e) {
-            logger.error("Mongo remove error for key {}: {}", key, e.getMessage(), e);
-            throw new RuntimeException("Mongo remove error", e);
-        }
-    }
-
-    @Override
-    public Set<String> getKeys() {
-        try {
-            Set<String> keys = new HashSet<>();
-            for (Document doc : collection.find().projection(new Document("key", 1))) {
-                if (doc.containsKey("key") && doc.get("key") instanceof String) {
-                    keys.add(doc.getString("key"));
+    public Mono<byte[]> get(String key) {
+        return Mono.fromCallable(() -> {
+            try {
+                Document doc = collection.find(Filters.eq("key", key)).first();
+                if (doc != null && doc.get("value") instanceof Binary) {
+                    return ((Binary) doc.get("value")).getData();
                 }
+                return null;
+            } catch (Exception e) {
+                logger.error("Mongo get error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Mongo get error", e);
             }
-            return keys;
-        } catch (Exception e) {
-            logger.error("Mongo getKeys error: {}", e.getMessage(), e);
-            throw new RuntimeException("Mongo getKeys error", e);
-        }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override
-    public boolean containsKey(String key) {
-        try {
-            long count = collection.countDocuments(Filters.eq("key", key));
-            return count > 0;
-        } catch (Exception e) {
-            logger.error("Mongo containsKey error for key {}: {}", key, e.getMessage(), e);
-            throw new RuntimeException("Mongo containsKey error", e);
-        }
+    public Mono<byte[]> remove(String key) {
+        return Mono.fromCallable(() -> {
+            try {
+                Document doc = collection.findOneAndDelete(Filters.eq("key", key));
+                if (doc != null && doc.get("value") instanceof Binary) {
+                    return ((Binary) doc.get("value")).getData();
+                }
+                return null;
+            } catch (Exception e) {
+                logger.error("Mongo remove error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Mongo remove error", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override
-    public void clear() {
-        try {
-            collection.deleteMany(new Document());
-        } catch (Exception e) {
-            logger.error("Mongo clear error: {}", e.getMessage(), e);
-            throw new RuntimeException("Mongo clear error", e);
-        }
+    public Flux<String> getKeys() {
+        return Flux.create(sink -> {
+            try {
+                for (Document doc : collection.find().projection(new Document("key", 1))) {
+                    if (doc.containsKey("key") && doc.get("key") instanceof String) {
+                        sink.next(doc.getString("key"));
+                    }
+                }
+                sink.complete();
+            } catch (Exception e) {
+                logger.error("Mongo getKeys error: {}", e.getMessage(), e);
+                sink.error(new RuntimeException("Mongo getKeys error", e));
+            }
+        }).cast(String.class).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override
-    public void checkHealth() throws Exception {
-        // Run a simple ping command to check connectivity
-        mongoClient.getDatabase("admin").runCommand(new Document("ping", 1));
+    public Mono<Boolean> containsKey(String key) {
+        return Mono.fromCallable(() -> {
+            try {
+                long count = collection.countDocuments(Filters.eq("key", key));
+                return count > 0;
+            } catch (Exception e) {
+                logger.error("Mongo containsKey error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Mongo containsKey error", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<Void> clear() {
+        return Mono.fromRunnable(() -> {
+            try {
+                collection.deleteMany(new Document());
+            } catch (Exception e) {
+                logger.error("Mongo clear error: {}", e.getMessage(), e);
+                throw new RuntimeException("Mongo clear error", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    @Override
+    public Mono<Void> checkHealth() {
+        return Mono.fromRunnable(() -> {
+            mongoClient.getDatabase("admin").runCommand(new Document("ping", 1));
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     @Override

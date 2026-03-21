@@ -6,7 +6,7 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 ## 2. Goals
 - Provide a `Cache` interface for abstracting storage operations.
 - Implement a thread-safe `InMemoryCache`.
-- Implement a `RedisCache` using Spring Data Redis.
+- Implement a `RedisCache` using Spring Data Redis Reactive (`ReactiveRedisTemplate`).
 - Implement a `MongoCache` matching the Rust implementation's BSON document structure.
 - Implement an `OracleCache` using standard JDBC matching the Rust application's BLOB/VARCHAR2 schema.
 - Support store configuration via `StoreDefinition`.
@@ -20,7 +20,7 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 **Acceptance Criteria:**
 - [ ] Define `Cache` interface.
 - [ ] Methods: `get(key)`, `put(key, value)`, `remove(key)`, `getKeys()`, `containsKey(key)`, `clear()`, `checkHealth()`.
-- [ ] All methods block (synchronous API) to match Spring MVC model.
+- [ ] Return Reactor types (`Mono`, `Flux`) to provide non-blocking operations.
 
 ### US-002: In-Memory Implementation
 **Description:** As an operator, I want a fast, local cache for transient data.
@@ -67,15 +67,18 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 ### Cache Interface
 1.  **Contract**:
     ```java
+    import reactor.core.publisher.Flux;
+    import reactor.core.publisher.Mono;
+
     public interface Cache {
         String getName();
-        void put(String key, byte[] value);
-        byte[] get(String key);
-        byte[] remove(String key);
-        Set<String> getKeys();
-        boolean containsKey(String key);
-        void clear();
-        void checkHealth() throws Exception;
+        Mono<Void> put(String key, byte[] value);
+        Mono<byte[]> get(String key);
+        Mono<byte[]> remove(String key);
+        Flux<String> getKeys();
+        Mono<Boolean> containsKey(String key);
+        Mono<Void> clear();
+        Mono<Void> checkHealth();
     }
     ```
 
@@ -87,7 +90,7 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 4.  **Connection**: `Lettuce` (non-blocking driver).
 5.  **Configuration**: From `StoreDefinition` (URI parsing for DB index `redis://host:port/dbIndex`).
 6.  **Key Prefixing**: Transparently add/remove prefix on all operations.
-7.  **Key Listing**: Iterative `SCAN` using `RedisTemplate.scan()`.
+7.  **Key Listing**: Iterative `SCAN` using `ReactiveRedisTemplate.scan()`.
 
 ### MongoCache
 8.  **Connection**: `MongoClient` from `com.mongodb.client.MongoClients`.
@@ -102,7 +105,7 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 
 ## 5. Non-Goals
 - TTL support per key (not in interface).
-- Async API (interface is synchronous).
+- Full end-to-end reactive ingestion loop (KafkaConsumer polling is still synchronous and uses `.block()` appropriately).
 
 ## 6. Technical Considerations
 - **Resource Management**: `RedisCache` implements `AutoCloseable` (and `CacheFactory` is `DisposableBean`) to ensure connections are closed on shutdown.

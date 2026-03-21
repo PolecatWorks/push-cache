@@ -3,18 +3,17 @@ package com.polecatworks.pushcache.service;
 import com.polecatworks.pushcache.config.StoreDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-import org.springframework.data.redis.core.Cursor;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.net.URI;
-import java.util.HashSet;
-import java.util.Set;
 
 public class RedisCache implements Cache, AutoCloseable {
 
@@ -23,7 +22,7 @@ public class RedisCache implements Cache, AutoCloseable {
     private final String name;
     private final String prefix;
     private final LettuceConnectionFactory connectionFactory;
-    private final RedisTemplate<String, byte[]> redisTemplate;
+    private final ReactiveRedisTemplate<String, byte[]> redisTemplate;
 
     public RedisCache(StoreDefinition storeDefinition) {
         this.name = storeDefinition.getName();
@@ -66,13 +65,14 @@ public class RedisCache implements Cache, AutoCloseable {
         this.connectionFactory = new LettuceConnectionFactory(redisConfig);
         this.connectionFactory.afterPropertiesSet();
 
-        this.redisTemplate = new RedisTemplate<>();
-        this.redisTemplate.setConnectionFactory(this.connectionFactory);
-        this.redisTemplate.setKeySerializer(new StringRedisSerializer());
-        this.redisTemplate.setValueSerializer(RedisSerializer.byteArray());
-        this.redisTemplate.setHashKeySerializer(new StringRedisSerializer());
-        this.redisTemplate.setHashValueSerializer(RedisSerializer.byteArray());
-        this.redisTemplate.afterPropertiesSet();
+        RedisSerializationContext<String, byte[]> serializationContext = RedisSerializationContext
+                .<String, byte[]>newSerializationContext(new StringRedisSerializer())
+                .value(RedisSerializer.byteArray())
+                .hashKey(new StringRedisSerializer())
+                .hashValue(RedisSerializer.byteArray())
+                .build();
+
+        this.redisTemplate = new ReactiveRedisTemplate<>(this.connectionFactory, serializationContext);
 
         logger.info("Initialized RedisCache '{}' connected to {}", name, uri);
     }
@@ -90,77 +90,65 @@ public class RedisCache implements Cache, AutoCloseable {
     }
 
     @Override
-    public void put(String key, byte[] value) {
-        redisTemplate.opsForValue().set(formatKey(key), value);
+    public Mono<Void> put(String key, byte[] value) {
+        return redisTemplate.opsForValue().set(formatKey(key), value).then();
     }
 
     @Override
-    public byte[] get(String key) {
+    public Mono<byte[]> get(String key) {
         return redisTemplate.opsForValue().get(formatKey(key));
     }
 
     @Override
-    public byte[] remove(String key) {
+    public Mono<byte[]> remove(String key) {
         String fullKey = formatKey(key);
-        // GETDEL is supported in Redis 6.2+. If not supported, we might need a Lua script or just delete.
-        // Spring Data Redis 'getAndDelete' uses GETDEL if available.
-        return redisTemplate.opsForValue().getAndDelete(fullKey);
+        // ReactiveRedisTemplate opsForValue() has delete(K key) which returns Mono<Boolean>
+        // We need to return the value that was deleted.
+        return redisTemplate.opsForValue().get(fullKey)
+                .flatMap(val -> redisTemplate.opsForValue().delete(fullKey).thenReturn(val));
     }
 
     @Override
-    public Set<String> getKeys() {
-        Set<String> keys = new HashSet<>();
+    public Flux<String> getKeys() {
         String scanPattern = (prefix != null && !prefix.isEmpty()) ? prefix + ":*" : "*";
-
         ScanOptions options = ScanOptions.scanOptions().match(scanPattern).count(100).build();
 
-        try (Cursor<String> cursor = redisTemplate.scan(options)) {
-            while (cursor.hasNext()) {
-                String key = cursor.next();
-                if (prefix != null && !prefix.isEmpty()) {
-                    if (key.startsWith(prefix + ":")) {
-                        keys.add(key.substring(prefix.length() + 1));
-                    } else {
-                        keys.add(key);
+        return redisTemplate.scan(options)
+                .map(key -> {
+                    if (prefix != null && !prefix.isEmpty()) {
+                        if (key.startsWith(prefix + ":")) {
+                            return key.substring(prefix.length() + 1);
+                        }
                     }
-                } else {
-                    keys.add(key);
-                }
-            }
-        }
-        return keys;
+                    return key;
+                });
     }
 
     @Override
-    public boolean containsKey(String key) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(formatKey(key)));
+    public Mono<Boolean> containsKey(String key) {
+        return redisTemplate.hasKey(formatKey(key));
     }
 
     @Override
-    public void clear() {
+    public Mono<Void> clear() {
         String scanPattern = (prefix != null && !prefix.isEmpty()) ? prefix + ":*" : "*";
         ScanOptions options = ScanOptions.scanOptions().match(scanPattern).count(100).build();
 
-        Set<String> keysToDelete = new HashSet<>();
-        try (Cursor<String> cursor = redisTemplate.scan(options)) {
-            while (cursor.hasNext()) {
-                keysToDelete.add(cursor.next());
-            }
-        }
-
-        if (!keysToDelete.isEmpty()) {
-            redisTemplate.delete(keysToDelete);
-        }
+        return redisTemplate.scan(options)
+                .buffer(100) // Delete in batches
+                .flatMap(keys -> redisTemplate.delete(Flux.fromIterable(keys)))
+                .then();
     }
 
     @Override
-    public void checkHealth() throws Exception {
-        try (RedisConnection connection = connectionFactory.getConnection()) {
-            String response = connection.ping();
-            if (!"PONG".equalsIgnoreCase(response)) {
-                 throw new RuntimeException("Redis PING failed for cache " + name + ": " + response);
-            }
-        }
+    public Mono<Void> checkHealth() {
+        return redisTemplate.getConnectionFactory().getReactiveConnection().ping()
+                .flatMap(response -> {
+                    if (!"PONG".equalsIgnoreCase(response)) {
+                        return Mono.error(new RuntimeException("Redis PING failed for cache " + name + ": " + response));
+                    }
+                    return Mono.empty();
+                }).then();
     }
 
     @Override

@@ -13,23 +13,15 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.io.ByteArrayOutputStream;
 import java.util.Collections;
 
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
-@AutoConfigureMockMvc
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = {
         // Hams
         "hams.address=0.0.0.0:8079",
@@ -46,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "runtime.name=test",
 
         // WebService
-        "webservice.address=http://localhost:8080/api",
+        "webservice.address=http://localhost:0/api",
 
         // Kafka
         "kafka.brokers=tcp://localhost:9092",
@@ -72,7 +64,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class DynamicRouteTest {
 
     @Autowired
-    private MockMvc mockMvc;
+    private WebTestClient webTestClient;
 
     @Autowired
     private Cache cache;
@@ -82,31 +74,36 @@ public class DynamicRouteTest {
 
     @org.junit.jupiter.api.BeforeEach
     void setup() {
-        cache.clear();
+        cache.clear().block();
     }
 
     @Test
     void testListRecords() throws Exception {
-        cache.put("key1", "val1".getBytes());
-        cache.put("key2", "val2".getBytes());
+        cache.put("key1", "val1".getBytes()).block();
+        cache.put("key2", "val2".getBytes()).block();
 
-        mockMvc.perform(get("/api"))
-                .andDo(print())
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$", contains("key1", "key2")));
+        webTestClient.get().uri("/api")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.length()").isEqualTo(2)
+                .jsonPath("$[0]").isEqualTo("key1")
+                .jsonPath("$[1]").isEqualTo("key2");
     }
 
     @Test
     void testListRecordsNoTrailingSlash() throws Exception {
-        cache.put("key1", "val1".getBytes());
-        cache.put("key2", "val2".getBytes());
+        cache.put("key1", "val1".getBytes()).block();
+        cache.put("key2", "val2".getBytes()).block();
 
         // /api is configured as base path, so /api should work same as /api/
-        mockMvc.perform(get("/api"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$", contains("key1", "key2")));
+        webTestClient.get().uri("/api")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.length()").isEqualTo(2)
+                .jsonPath("$[0]").isEqualTo("key1")
+                .jsonPath("$[1]").isEqualTo("key2");
     }
 
     @Test
@@ -128,32 +125,36 @@ public class DynamicRouteTest {
         encoder.flush();
 
         byte[] content = out.toByteArray();
-        cache.put("key1", content);
+        cache.put("key1", content).block();
 
-        mockMvc.perform(get("/api/key1"))
-                .andExpect(status().isOk())
-                .andExpect(header().string("Cache-Control", "max-age=60, public"))
-                .andExpect(content().json("\"hello\""));
+        webTestClient.get().uri("/api/key1")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("Cache-Control", "max-age=60, public")
+                .expectBody().json("\"hello\"");
     }
 
     @Test
     void testGetRecordNotFound() throws Exception {
-        mockMvc.perform(get("/api/unknown"))
-                .andExpect(status().isNotFound());
+        webTestClient.get().uri("/api/unknown")
+                .exchange()
+                .expectStatus().isNotFound();
     }
 
     @Test
     void testDeleteRecord() throws Exception {
         byte[] content = "to_delete".getBytes();
-        cache.put("del_key", content);
+        cache.put("del_key", content).block();
 
-        mockMvc.perform(delete("/api/del_key"))
-                .andExpect(status().isOk())
-                .andExpect(content().bytes(content));
+        webTestClient.delete().uri("/api/del_key")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(byte[].class).isEqualTo(content);
 
         // Ensure it is gone
-        mockMvc.perform(get("/api/del_key"))
-                .andExpect(status().isNotFound());
+        webTestClient.get().uri("/api/del_key")
+                .exchange()
+                .expectStatus().isNotFound();
     }
 
     @Test
@@ -168,23 +169,25 @@ public class DynamicRouteTest {
         // Data
         body[5] = 0x10;
 
-        mockMvc.perform(post("/api/new_record")
-                .content(body))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value("new_record"));
+        webTestClient.post().uri("/api/new_record")
+                .bodyValue(body)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody().jsonPath("$.id").isEqualTo("new_record");
 
         // Verify it is in cache
-        byte[] cached = cache.get("new_record");
+        byte[] cached = cache.get("new_record").block();
         org.junit.jupiter.api.Assertions.assertArrayEquals(body, cached);
     }
 
     @Test
     void testCreateRecordPayloadTooShort() throws Exception {
         byte[] body = new byte[4];
-        mockMvc.perform(post("/api/short_record")
-                .content(body))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.message").value("Payload too short"));
+        webTestClient.post().uri("/api/short_record")
+                .bodyValue(body)
+                .exchange()
+                .expectStatus().is5xxServerError()
+                .expectBody().jsonPath("$.message").isEqualTo("Payload too short");
     }
 
     @Test
@@ -192,9 +195,10 @@ public class DynamicRouteTest {
         byte[] body = new byte[10];
         body[0] = 1; // Invalid Magic byte
 
-        mockMvc.perform(post("/api/bad_magic")
-                .content(body))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.message").value("Invalid Magic Byte"));
+        webTestClient.post().uri("/api/bad_magic")
+                .bodyValue(body)
+                .exchange()
+                .expectStatus().is5xxServerError()
+                .expectBody().jsonPath("$.message").isEqualTo("Invalid Magic Byte");
     }
 }

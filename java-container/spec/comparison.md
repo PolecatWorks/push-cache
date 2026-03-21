@@ -28,10 +28,9 @@ This document highlights the architectural and implementation differences betwee
 - **Throughput**: Designed for high concurrency with low thread count.
 
 ### Java
-- **Blocking/Synchronous**: Built on Spring WebMvc (Servlet) and `kafka-clients`.
-- **Thread per Request**: The `RecordHandler` and `Cache` interface are synchronous.
-- **Kafka**: The consumer runs in a dedicated thread.
-- **Impact**: Redis operations (GET/PUT) block the Servlet thread. `getKeys` on Redis uses a cursor but still blocks the calling thread during iteration.
+- **Non-Blocking/Reactive Layer**: Built on Spring WebFlux and Reactor. The Cache interface returns `Mono`/`Flux`.
+- **Kafka**: The consumer runs in a dedicated thread (synchronous poll loop) and uses `.block()` appropriately to bridge with the reactive Cache API.
+- **Impact**: Redis operations and web API requests are now fully non-blocking, eliminating thread starvation under load.
 
 ## 3. Configuration Loading
 
@@ -66,8 +65,8 @@ This document highlights the architectural and implementation differences betwee
 - **Serialization**: `apache_avro` -> `serde_json::Value` -> HTTP Body.
 
 ### Java
-- **Framework**: Spring WebMvc (`RouterFunctions`).
-- **Routing**: Dynamic `RouterFunction` composition.
+- **Framework**: Spring WebFlux (`RouterFunctions`).
+- **Routing**: Dynamic `RouterFunction` composition yielding `Mono<ServerResponse>`.
 - **Serialization**: `apache-avro` (`GenericDatumWriter`) -> JSON Bytes -> HTTP Body.
 - **Parity**: High. Both implementations support dynamic routing based on configuration, including the "Get Record by Body" endpoint (`_by_body` suffix) for POST-like retrieval of GET resources using a JSON body.
 
@@ -86,4 +85,4 @@ This document highlights the architectural and implementation differences betwee
 
 ## 7. Summary of Work Remaining
 To achieve full parity, the Java implementation requires:
-1.  **Redis Async**: (Optional) Consider moving to Spring WebFlux if non-blocking Redis access is required for performance parity under load.
+(All major gaps addressed).

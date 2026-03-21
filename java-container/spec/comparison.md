@@ -71,19 +71,19 @@ This document highlights the architectural and implementation differences betwee
 - **Serialization**: `apache-avro` (`GenericDatumWriter`) -> JSON Bytes -> HTTP Body.
 - **Parity**: High. Both implementations support dynamic routing based on configuration, including the "Get Record by Body" endpoint (`_by_body` suffix) for POST-like retrieval of GET resources using a JSON body.
 
-## 6. Storage Backends (New Divergence)
+## 6. Storage Backends
 
 ### Rust
 - Supports `InMemory`, `Redis`, `Mongo`, and `Oracle` cache stores.
 - The `Mongo` store persists data as BSON documents.
-- The `Oracle` store persists data as BLOBs with a VARCHAR2 primary key.
+- The `Oracle` store persists data as BLOBs with a VARCHAR2 primary key, leveraging `spawn_blocking` to wrap synchronous oracle operations.
 
 ### Java
-- Currently supports `IN_MEMORY`, `REDIS`, and `MONGO` cache stores.
+- Supports `IN_MEMORY`, `REDIS`, `MONGO`, and `ORACLE` cache stores.
 - The `MONGO` store persists data as BSON documents matching the Rust implementation.
-- **Gap**: The Java implementation needs to add support for the Oracle backend to reach full feature parity.
+- The `ORACLE` store persists data as BLOBs with a VARCHAR2 primary key, utilizing standard synchronous JDBC (`HikariDataSource` and `JdbcTemplate`) which aligns with the application's overall synchronous execution model. Flyway is used via `create-schemas` CLI command to automatically create the table.
+- **Parity**: High. The Java application has now matched the supported data stores of the Rust implementation, resolving the previous divergence.
 
 ## 7. Summary of Work Remaining
 To achieve full parity, the Java implementation requires:
-1.  **Oracle Backend Support**: Implement the `OracleCache` class and backend handling.
-2.  **Redis Async**: (Optional) Consider moving to Spring WebFlux if non-blocking Redis access is required for performance parity under load.
+1.  **Redis Async**: (Optional) Consider moving to Spring WebFlux if non-blocking Redis access is required for performance parity under load.

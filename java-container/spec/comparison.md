@@ -2,7 +2,7 @@
 
 This document highlights the architectural and implementation differences between the `java-container` (Port) and `rust-container` (Reference) services.
 
-## 1. Observability & Health (Major Divergence)
+## 1. Observability & Health
 
 ### Rust (Reference)
 - **Library**: Uses `hamsrs`, a dedicated health and metrics server.
@@ -15,9 +15,10 @@ This document highlights the architectural and implementation differences betwee
 ### Java (Port)
 - **Library**: Custom `HamsService` using `com.sun.net.httpserver.HttpServer` + Standard Spring Boot Actuator.
 - **Mechanism**:
-    - **Manual Sidecar**: The `HamsService` opens a separate port (e.g., 8079) but serves **static** responses for `/ready` and `/alive`. It **does not** currently check the `LagClearedHealthIndicator`.
-    - **Actuator**: The main application port (e.g., 8080) exposes `/actuator/health` and `/actuator/prometheus`. These **do** contain the correct logic (Lag check and Metrics), but they are on the "wrong" port compared to the Rust sidecar pattern.
-- **Gap**: The Java `HamsService` needs to be updated to query the internal `HealthIndicator` beans instead of returning static strings, to truly match the Rust behavior on the sidecar port.
+    - **Manual Sidecar**: The `HamsService` opens a separate port (e.g., 8079) to match the Rust deployment pattern. It serves `/alive`, `/startup`, and `/ready` checks by directly querying the internal `CacheHealthIndicator` and `LagClearedHealthIndicator` beans.
+    - **Metrics**: The `/metrics` endpoint serves Prometheus metrics by querying the internal `PrometheusMeterRegistry`.
+    - **Actuator**: The main application port (e.g., 8080) also exposes `/actuator/health` and `/actuator/prometheus` for deeper introspection.
+- **Parity**: High. The custom `HamsService` correctly bridges the gap to provide the expected sidecar API endpoints, utilizing the internal Spring Boot indicators and registries.
 
 ## 2. Concurrency Model
 
@@ -85,5 +86,4 @@ This document highlights the architectural and implementation differences betwee
 ## 7. Summary of Work Remaining
 To achieve full parity, the Java implementation requires:
 1.  **Oracle Backend Support**: Implement the `OracleCache` class and backend handling.
-2.  **Hams Upgrade**: Connect the manual `HamsService` endpoints (`/ready`, `/metrics`) to the internal Spring `HealthIndicator` and `MeterRegistry` beans so the sidecar port reports actual status.
-3.  **Redis Async**: (Optional) Consider moving to Spring WebFlux if non-blocking Redis access is required for performance parity under load.
+2.  **Redis Async**: (Optional) Consider moving to Spring WebFlux if non-blocking Redis access is required for performance parity under load.

@@ -15,12 +15,11 @@ The Java implementation provides observability through a dual-mechanism approach
 **Description:** As a platform engineer, I expect a separate health server on a configurable port (e.g., 8079).
 
 **Acceptance Criteria:**
-- [ ] Start a raw `com.sun.net.httpserver.HttpServer` on `hams.address`.
-- [ ] Expose `/alive` -> Returns 200 OK "OK".
-- [ ] Expose `/ready` -> Returns 200 OK "Ready".
-- [ ] Expose `/startup` -> Returns 200 OK "Startup OK".
-- [ ] Expose `/metrics` -> Returns a placeholder/static response (currently).
-- [ ] **Note**: This server currently returns static responses and does not query internal health indicators.
+- [x] Start a raw `com.sun.net.httpserver.HttpServer` on `hams.address`.
+- [x] Expose `/alive` -> Returns 200 OK "OK".
+- [x] Expose `/ready` -> Returns 200 OK "Ready" (queries `LagClearedHealthIndicator` and `CacheHealthIndicator`).
+- [x] Expose `/startup` -> Returns 200 OK "Startup OK" (queries `CacheHealthIndicator`).
+- [x] Expose `/metrics` -> Serves actual metrics via `PrometheusMeterRegistry`.
 
 ### US-002: Application Metrics (Micrometer)
 **Description:** As a developer, I want to track specific application metrics using the standard Spring registry.
@@ -72,11 +71,11 @@ The Java implementation provides observability through a dual-mechanism approach
 7.  **Cache**: `CacheHealthIndicator` (Iterates all stores, calls `checkHealth()`).
 
 ## 5. Non-Goals
-- Full parity between the manual Hams server and the Spring Actuator endpoints. (Hams is currently a simplified facade).
+- Full parity between the manual Hams server and the Spring Actuator endpoints. (Hams exposes only specific sidecar-required endpoints).
 
 ## 6. Technical Considerations
 - **Dual Ports**: The application opens two ports: one for the main API (Tomcat, 8080) and one for Hams (HttpServer, 8079).
-- **Metric Exposure**: Real metrics are available on the *main* port (`/actuator/prometheus`), while the Hams port serves a placeholder. This is a divergence from the Rust implementation where Hams serves the real metrics.
+- **Metric Exposure**: Real metrics are available on both the *main* port (`/actuator/prometheus`) and the Hams port (`/metrics`), matching the Rust implementation's sidecar pattern.
 
 ## 7. Success Metrics
 - Hams server starts on the configured port.

@@ -3,10 +3,13 @@ package com.polecatworks.pushcache.service;
 import com.polecatworks.pushcache.config.AppConfig;
 import com.polecatworks.pushcache.config.HamsConfig;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.boot.actuate.health.Status;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -20,11 +23,17 @@ public class HamsService implements DisposableBean {
     private static final Logger logger = LoggerFactory.getLogger(HamsService.class);
     private final AppConfig appConfig;
     private final RestClient restClient;
+    private final LagClearedHealthIndicator lagHealthIndicator;
+    private final CacheHealthIndicator cacheHealthIndicator;
+    private final MeterRegistry meterRegistry;
     private HttpServer server;
 
-    public HamsService(AppConfig appConfig) {
+    public HamsService(AppConfig appConfig, LagClearedHealthIndicator lagHealthIndicator, CacheHealthIndicator cacheHealthIndicator, MeterRegistry meterRegistry) {
         this.appConfig = appConfig;
         this.restClient = RestClient.builder().build();
+        this.lagHealthIndicator = lagHealthIndicator;
+        this.cacheHealthIndicator = cacheHealthIndicator;
+        this.meterRegistry = meterRegistry;
     }
 
     @PostConstruct
@@ -67,28 +76,54 @@ public class HamsService implements DisposableBean {
 
             // Handler for /ready
             server.createContext(basePath + "/ready", (exchange) -> {
-                String response = "Ready";
-                exchange.sendResponseHeaders(200, response.length());
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response.getBytes());
+                boolean isLagCleared = lagHealthIndicator.health().getStatus() == Status.UP;
+                boolean isCacheUp = cacheHealthIndicator.health().getStatus() == Status.UP;
+
+                if (isLagCleared && isCacheUp) {
+                    String response = "Ready";
+                    exchange.sendResponseHeaders(200, response.length());
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(response.getBytes());
+                    }
+                } else {
+                    String response = "Service Unavailable";
+                    exchange.sendResponseHeaders(503, response.length());
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(response.getBytes());
+                    }
                 }
             });
 
             // Handler for /startup
             server.createContext(basePath + "/startup", (exchange) -> {
-                String response = "Startup OK";
-                exchange.sendResponseHeaders(200, response.length());
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response.getBytes());
+                boolean isCacheUp = cacheHealthIndicator.health().getStatus() == Status.UP;
+
+                if (isCacheUp) {
+                    String response = "Startup OK";
+                    exchange.sendResponseHeaders(200, response.length());
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(response.getBytes());
+                    }
+                } else {
+                    String response = "Service Unavailable";
+                    exchange.sendResponseHeaders(503, response.length());
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(response.getBytes());
+                    }
                 }
             });
 
             // Handler for /metrics
             logger.info("Registering metrics handler at {}", basePath + "/metrics");
             server.createContext(basePath + "/metrics", (exchange) -> {
-                String response = "# HELP app_info Application info\n# TYPE app_info gauge\napp_info{app=\"push-cache\", status=\"up\"} 1\n";
+                String response;
+                if (meterRegistry instanceof PrometheusMeterRegistry) {
+                    response = ((PrometheusMeterRegistry) meterRegistry).scrape();
+                } else {
+                    response = "# Metrics not available in prometheus format";
+                }
                 exchange.getResponseHeaders().set("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
-                exchange.sendResponseHeaders(200, response.length());
+                exchange.sendResponseHeaders(200, response.getBytes().length);
                 try (OutputStream os = exchange.getResponseBody()) {
                     os.write(response.getBytes());
                 }

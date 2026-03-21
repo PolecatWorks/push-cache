@@ -7,6 +7,7 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 - Provide a `Cache` interface for abstracting storage operations.
 - Implement a thread-safe `InMemoryCache`.
 - Implement a `RedisCache` using Spring Data Redis.
+- Implement a `MongoCache` matching the Rust implementation's BSON document structure.
 - Support store configuration via `StoreDefinition`.
 - Support key namespacing for Redis.
 
@@ -41,6 +42,15 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 - [ ] `checkHealth()` performs a `PING`.
 - [ ] Implement `AutoCloseable` to clean up connections.
 
+### US-004: Mongo Implementation
+**Description:** As an operator, I want a robust document database backend for data persistence and advanced querying capabilities in the future.
+
+**Acceptance Criteria:**
+- [ ] Use standard MongoDB Java Driver (`mongodb-driver-sync` / `spring-boot-starter-data-mongodb`).
+- [ ] Handle BSON `Binary` formats natively to replicate the document structure of the Rust application (`{"key": "my_key", "value": <binary>}`).
+- [ ] `checkHealth()` performs a `ping` against the `admin` database.
+- [ ] Implement `AutoCloseable` to clean up `MongoClient` connections.
+
 ## 4. Functional Requirements
 
 ### Cache Interface
@@ -67,6 +77,11 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 5.  **Configuration**: From `StoreDefinition` (URI parsing for DB index `redis://host:port/dbIndex`).
 6.  **Key Prefixing**: Transparently add/remove prefix on all operations.
 7.  **Key Listing**: Iterative `SCAN` using `RedisTemplate.scan()`.
+
+### MongoCache
+8.  **Connection**: `MongoClient` from `com.mongodb.client.MongoClients`.
+9.  **Format**: Stores items in the target collection identically to the Rust equivalent (`"key"` is String, `"value"` is `org.bson.types.Binary`).
+10. **Listing**: Standard cursor-based document enumeration.
 
 ## 5. Non-Goals
 - TTL support per key (not in interface).

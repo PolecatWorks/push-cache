@@ -55,11 +55,12 @@ The configuration system provides a flexible, layered approach to configuring th
 
 **Acceptance Criteria:**
 - [ ] Config supports a `cache` section.
-- [ ] `cache.stores` list allows defining `in_memory`, `redis`, `mongo`, and `oracle` stores.
+- [ ] `cache.stores` list allows defining `in_memory`, `redis`, `mongo`, `oracle`, and `postgres` stores.
 - [ ] `cache.routes` list allows mapping URL paths to store names, and optionally `key_from_body`.
 - [ ] `redis` store config includes `url` and optional `prefix`.
 - [ ] `mongo` store config includes `url`, `database`, `collection`, `min_pool_size`, and `max_pool_size`.
 - [ ] `oracle` store config includes `url` and `table_name`.
+- [ ] `postgres` store config includes `url` and `table_name`.
 
 ## 4. Functional Requirements
 
@@ -87,7 +88,7 @@ The configuration system provides a flexible, layered approach to configuring th
     *   `preload_schemas`: List of integer Schema IDs to be fetched and cached at startup (optional). Startup will fail if any schema cannot be loaded.
 9.  **Startup Checks**: `StartupCheckConfig` (timeout, fails, enabled).
 10. **Cache**: `CacheConfig` (stores, routes).
-    *   `stores`: List of definitions. Each has `name`, `type` (tagged, snake_case, supports `in_memory`, `redis`, `mongo`, `oracle`), `schemas`.
+    *   `stores`: List of definitions. Each has `name`, `type` (tagged, snake_case, supports `in_memory`, `redis`, `mongo`, `oracle`, `postgres`), `schemas`.
     *   `routes`: List of `path` -> `store` mappings.
 
 ## 5. Non-Goals

@@ -54,6 +54,8 @@ bson = "2.15.0"
 futures-util = "0.3.32"
 oracle = "0.6"
 
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls"] }
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }
 fake = { version = "2.9", features = ["derive", "chrono"] }

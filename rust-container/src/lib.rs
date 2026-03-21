@@ -23,7 +23,7 @@ use crate::{
 
 use metrics::{prometheus_response_free, prometheus_response_mystate};
 
-use crate::cache::{Cache, InMemoryCache, MongoCache, OracleCache, RedisCache};
+use crate::cache::{Cache, InMemoryCache, MongoCache, OracleCache, PostgresCache, RedisCache};
 use crate::startup_tools::run_startup_checks;
 
 pub mod cache;
@@ -126,6 +126,9 @@ impl MyState {
                 }
                 crate::config::StoreType::Oracle(oracle_config) => {
                     Arc::new(OracleCache::new(oracle_config)?)
+                }
+                crate::config::StoreType::Postgres(pg_config) => {
+                    Arc::new(PostgresCache::new(pg_config).await?)
                 }
             };
             stores.insert(store_def.name.clone(), cache);

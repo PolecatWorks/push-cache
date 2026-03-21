@@ -10,8 +10,9 @@ use mongodb::{
     Client, Collection,
     options::{ClientOptions, UpdateOptions},
 };
+use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 
-use crate::config::{MongoConfig, OracleConfig, RedisConfig};
+use crate::config::{MongoConfig, OracleConfig, PostgresConfig, RedisConfig};
 use crate::error::MyError;
 use oracle::pool::PoolBuilder;
 
@@ -489,5 +490,103 @@ impl Cache for OracleCache {
         })
         .await
         .map_err(|e| MyError::Message(format!("Tokio spawn_blocking error: {e}")))?
+    }
+}
+
+pub struct PostgresCache {
+    pool: PgPool,
+    table_name: String,
+}
+
+impl PostgresCache {
+    pub async fn new(config: &PostgresConfig) -> Result<Self, MyError> {
+        let url: url::Url = config.url.clone().into();
+
+        let pool = PgPoolOptions::new()
+            .max_connections(10)
+            .connect(url.as_str())
+            .await
+            .map_err(|e| MyError::Message(format!("Postgres pool build error: {}", e)))?;
+
+        Ok(Self {
+            pool,
+            table_name: config.table_name.clone(),
+        })
+    }
+}
+
+#[async_trait]
+impl Cache for PostgresCache {
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, MyError> {
+        let sql = format!("SELECT v FROM {} WHERE k = $1", self.table_name);
+
+        let row_opt = sqlx::query(&sql)
+            .bind(key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| MyError::Message(format!("Postgres get error: {}", e)))?;
+
+        match row_opt {
+            Some(row) => Ok(Some(row.get::<Vec<u8>, _>(0))),
+            None => Ok(None),
+        }
+    }
+
+    async fn insert(&self, key: String, value: Vec<u8>) -> Result<(), MyError> {
+        let sql = format!(
+            "INSERT INTO {} (k, v) VALUES ($1, $2) ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v",
+            self.table_name
+        );
+
+        sqlx::query(&sql)
+            .bind(key)
+            .bind(value)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| MyError::Message(format!("Postgres insert error: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn remove(&self, key: &str) -> Result<Option<Vec<u8>>, MyError> {
+        let sql = format!("DELETE FROM {} WHERE k = $1 RETURNING v", self.table_name);
+
+        let row_opt = sqlx::query(&sql)
+            .bind(key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| MyError::Message(format!("Postgres remove error: {}", e)))?;
+
+        match row_opt {
+            Some(row) => Ok(Some(row.get::<Vec<u8>, _>(0))),
+            None => Ok(None),
+        }
+    }
+
+    async fn keys(&self) -> Result<Vec<String>, MyError> {
+        let sql = format!("SELECT k FROM {}", self.table_name);
+
+        let rows = sqlx::query(&sql)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| MyError::Message(format!("Postgres keys error: {}", e)))?;
+
+        let keys = rows.into_iter()
+            .map(|row| row.get::<String, _>(0))
+            .collect();
+
+        Ok(keys)
+    }
+
+    async fn contains_key(&self, key: &str) -> Result<bool, MyError> {
+        let sql = format!("SELECT 1 FROM {} WHERE k = $1", self.table_name);
+
+        let row_opt = sqlx::query(&sql)
+            .bind(key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| MyError::Message(format!("Postgres contains_key error: {}", e)))?;
+
+        Ok(row_opt.is_some())
     }
 }

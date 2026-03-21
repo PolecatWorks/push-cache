@@ -166,6 +166,8 @@ pub enum StoreType {
     Mongo(MongoConfig),
     /// Oracle cache store with specific configuration.
     Oracle(OracleConfig),
+    /// Postgres cache store with specific configuration.
+    Postgres(PostgresConfig),
 }
 
 /// Defines a route that maps a URL path to a specific cache store.
@@ -208,6 +210,15 @@ pub struct MongoConfig {
 #[derive(Deserialize, Debug, Clone)]
 pub struct OracleConfig {
     /// The Oracle connection URL.
+    pub url: UrlWithUsernamePassword,
+    /// The table name to use for this cache store.
+    pub table_name: String,
+}
+
+/// Configuration for a Postgres cache store.
+#[derive(Deserialize, Debug, Clone)]
+pub struct PostgresConfig {
+    /// The Postgres connection URL.
     pub url: UrlWithUsernamePassword,
     /// The table name to use for this cache store.
     pub table_name: String,

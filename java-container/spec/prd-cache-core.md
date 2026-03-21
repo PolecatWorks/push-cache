@@ -9,6 +9,7 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 - Implement a `RedisCache` using Spring Data Redis Reactive (`ReactiveRedisTemplate`).
 - Implement a `MongoCache` matching the Rust implementation's BSON document structure.
 - Implement an `OracleCache` using standard JDBC matching the Rust application's BLOB/VARCHAR2 schema.
+- Implement a `PostgresCache` (Future Goal) to match the Rust application's BYTEA/VARCHAR schema.
 - Support store configuration via `StoreDefinition`.
 - Support key namespacing for Redis.
 
@@ -62,6 +63,16 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 - [ ] `insert` performs an upsert using `MERGE INTO`.
 - [ ] Add CLI subcommand `create-schemas` to automatically create the configured Oracle tables before the service runs using JDBC.
 
+### US-006: Postgres Implementation (Future Goal)
+**Description:** As an operator, I want to use a PostgreSQL database as a persistent cache backend to match Rust capabilities.
+
+**Acceptance Criteria:**
+- [ ] (Future) Use `postgresql` JDBC driver and Spring's `JdbcTemplate` with a `HikariDataSource`.
+- [ ] (Future) Support `url` and `tableName` configurations.
+- [ ] (Future) Keys are stored as `VARCHAR` (Primary Key) and values as `BYTEA`.
+- [ ] (Future) `insert` performs an upsert using `ON CONFLICT DO UPDATE`.
+- [ ] (Future) Update CLI subcommand `create-schemas` to automatically create the configured Postgres tables before the service runs using JDBC.
+
 ## 4. Functional Requirements
 
 ### Cache Interface
@@ -102,6 +113,11 @@ The Core Cache Layer provides a consistent interface for storing data, whether i
 12. **Format**: Data is stored in rows with `k` (VARCHAR2) and `v` (BLOB).
 13. **Sync**: All Oracle interactions run synchronously, matching the application's overall web server model.
 14. **Management**: The `create-schemas` CLI command handles automatic setup.
+
+### PostgresCache (Future Goal)
+15. **Connection**: `HikariDataSource` with `JdbcTemplate`.
+16. **Format**: Data is stored in rows with `k` (VARCHAR) and `v` (BYTEA).
+17. **Management**: The `create-schemas` CLI command handles automatic setup.
 
 ## 5. Non-Goals
 - TTL support per key (not in interface).

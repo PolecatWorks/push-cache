@@ -63,16 +63,16 @@ The Java configuration system mirrors the Rust implementation, leveraging Spring
 
 ### Cache Configuration
 6.  **Stores**: List of `StoreDefinition`.
-    *   `type`: Enum (`IN_MEMORY`, `REDIS`, `MONGO`, `ORACLE`).
+    *   `type`: Enum (`IN_MEMORY`, `REDIS`, `MONGO`, `ORACLE`, `POSTGRES`).
     *   `name`: String.
     *   `schemas`: List of strings.
-    *   `url`: URI (Redis, Mongo, and Oracle).
+    *   `url`: URI (Redis, Mongo, Oracle, and Postgres).
     *   `prefix`: String (Redis only).
     *   `database`: String (Mongo only).
     *   `collection`: String (Mongo only).
     *   `min_pool_size`: Integer (Mongo only).
     *   `max_pool_size`: Integer (Mongo only).
-    *   `tableName`: String (Oracle only).
+    *   `tableName`: String (Oracle and Postgres only).
 7.  **Routes**: List of `RouteDefinition`.
     *   `path`: String.
     *   `store`: String.

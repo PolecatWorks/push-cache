@@ -117,51 +117,86 @@ fn main() -> Result<ExitCode, MyError> {
                 });
 
             for store_def in &config.cache.stores {
-                if let push_cache::config::StoreType::Oracle(oracle_config) = &store_def.store_type
-                {
-                    info!(
-                        "Creating table {} for Oracle store {}",
-                        oracle_config.table_name, store_def.name
-                    );
+                match &store_def.store_type {
+                    push_cache::config::StoreType::Oracle(oracle_config) => {
+                        info!(
+                            "Creating table {} for Oracle store {}",
+                            oracle_config.table_name, store_def.name
+                        );
 
-                    let url: url::Url = oracle_config.url.clone().into();
-                    let username = url.username().to_string();
-                    let password = url.password().unwrap_or("").to_string();
+                        let url: url::Url = oracle_config.url.clone().into();
+                        let username = url.username().to_string();
+                        let password = url.password().unwrap_or("").to_string();
 
-                    let mut conn_str = String::new();
-                    if let Some(host) = url.host_str() {
-                        conn_str.push_str(&format!("//{}", host));
-                        if let Some(port) = url.port() {
-                            conn_str.push_str(&format!(":{}", port));
-                        }
-                        conn_str.push_str(url.path());
-                    } else {
-                        conn_str = url.as_str().to_string();
-                    }
-
-                    let conn = oracle::Connection::connect(&username, &password, &conn_str)
-                        .map_err(|e| MyError::Message(format!("Oracle connect error: {e}")))?;
-
-                    let sql = format!(
-                        "CREATE TABLE {} (k VARCHAR2(255) PRIMARY KEY, v BLOB)",
-                        oracle_config.table_name
-                    );
-
-                    match conn.execute(&sql, &[]) {
-                        Ok(_) => info!("Successfully created table {}", oracle_config.table_name),
-                        Err(e) => {
-                            if let Some(db_err) = e.db_error() {
-                                if db_err.code() == 955 {
-                                    info!("Table {} already exists", oracle_config.table_name);
-                                    continue;
-                                }
+                        let mut conn_str = String::new();
+                        if let Some(host) = url.host_str() {
+                            conn_str.push_str(&format!("//{}", host));
+                            if let Some(port) = url.port() {
+                                conn_str.push_str(&format!(":{}", port));
                             }
-                            error!("Failed to create table {}: {}", oracle_config.table_name, e);
-                            return Err(MyError::Message(format!(
-                                "Oracle create table error: {e}"
-                            )));
+                            conn_str.push_str(url.path());
+                        } else {
+                            conn_str = url.as_str().to_string();
+                        }
+
+                        let conn = oracle::Connection::connect(&username, &password, &conn_str)
+                            .map_err(|e| MyError::Message(format!("Oracle connect error: {e}")))?;
+
+                        let sql = format!(
+                            "CREATE TABLE {} (k VARCHAR2(255) PRIMARY KEY, v BLOB)",
+                            oracle_config.table_name
+                        );
+
+                        match conn.execute(&sql, &[]) {
+                            Ok(_) => info!("Successfully created table {}", oracle_config.table_name),
+                            Err(e) => {
+                                if let Some(db_err) = e.db_error() {
+                                    if db_err.code() == 955 {
+                                        info!("Table {} already exists", oracle_config.table_name);
+                                        continue;
+                                    }
+                                }
+                                error!("Failed to create table {}: {}", oracle_config.table_name, e);
+                                return Err(MyError::Message(format!(
+                                    "Oracle create table error: {e}"
+                                )));
+                            }
                         }
                     }
+                    push_cache::config::StoreType::Postgres(pg_config) => {
+                        info!(
+                            "Creating table {} for Postgres store {}",
+                            pg_config.table_name, store_def.name
+                        );
+
+                        let url: url::Url = pg_config.url.clone().into();
+
+                        let runtime = tokio::runtime::Runtime::new().unwrap();
+                        runtime.block_on(async {
+                            let pool = sqlx::postgres::PgPoolOptions::new()
+                                .max_connections(1)
+                                .connect(url.as_str())
+                                .await
+                                .map_err(|e| MyError::Message(format!("Postgres connect error: {e}")))?;
+
+                            let sql = format!(
+                                "CREATE TABLE IF NOT EXISTS {} (k VARCHAR PRIMARY KEY, v BYTEA)",
+                                pg_config.table_name
+                            );
+
+                            sqlx::query(&sql)
+                                .execute(&pool)
+                                .await
+                                .map_err(|e| {
+                                    error!("Failed to create table {}: {}", pg_config.table_name, e);
+                                    MyError::Message(format!("Postgres create table error: {e}"))
+                                })?;
+
+                            info!("Successfully verified/created table {}", pg_config.table_name);
+                            Ok::<(), MyError>(())
+                        })?;
+                    }
+                    _ => {}
                 }
             }
 

@@ -9,6 +9,7 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - Implement a non-blocking Redis store.
 - Implement a non-blocking MongoDB store.
 - Implement a non-blocking Oracle store using spawn_blocking.
+- Implement a non-blocking Postgres store.
 - Ensure all operations are asynchronous.
 - Support key namespacing (prefixes) for Redis.
 
@@ -61,6 +62,16 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 - [ ] `insert` performs an upsert using `MERGE INTO`.
 - [ ] Add CLI subcommand `create-schemas` to automatically create the configured Oracle tables before the service runs.
 
+### US-006: Postgres Implementation
+**Description:** As an operator, I want to use a PostgreSQL database as a persistent cache backend.
+
+**Acceptance Criteria:**
+- [ ] Use `sqlx` crate with tokio runtime.
+- [ ] Support `url` and `table_name` configurations.
+- [ ] Keys are stored as `VARCHAR` (Primary Key) and values as `BYTEA`.
+- [ ] `insert` performs an upsert using `ON CONFLICT DO UPDATE`.
+- [ ] Update CLI subcommand `create-schemas` to automatically create the configured Postgres tables before the service runs.
+
 ## 4. Functional Requirements
 
 ### Cache Trait
@@ -94,6 +105,11 @@ The Core Cache Layer provides an abstraction over different storage backends, al
 10. **Connection**: Use `oracle::pool::ConnectionPool` for connection multiplexing.
 11. **Storage Format**: Data is stored in rows with `k` (VARCHAR2) and `v` (BLOB).
 12. **Asynchronous Wrapper**: All synchronous Oracle interactions must run via `tokio::task::spawn_blocking` to prevent blocking the tokio runtime.
+
+### PostgresCache
+13. **Connection**: Use `sqlx::PgPool` for asynchronous connection multiplexing.
+14. **Storage Format**: Data is stored in rows with `k` (VARCHAR) and `v` (BYTEA).
+15. **Query Execution**: Built-in async support without requiring `spawn_blocking`.
 
 ## 5. Non-Goals
 - TTL (Time To Live) support per key. (Currently not implemented in the trait).

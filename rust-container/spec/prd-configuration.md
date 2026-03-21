@@ -33,7 +33,16 @@ The configuration system provides a flexible, layered approach to configuring th
 - [ ] Exits with error (non-zero) and prints error details if config is invalid.
 - [ ] Does NOT start the web server or Kafka consumer.
 
-### US-003: Environment Overrides
+### US-003: Create Schemas
+**Description:** As an operator, I want to initialize database schemas (e.g., Oracle tables) before starting the service.
+
+**Acceptance Criteria:**
+- [ ] Application accepts `create-schemas` subcommand.
+- [ ] Accepts same `--config` and `--secrets` arguments as start.
+- [ ] Iterates through all cache stores and creates the required tables (e.g., Oracle) if they do not exist.
+- [ ] Does NOT start the web server or Kafka consumer.
+
+### US-004: Environment Overrides
 **Description:** As an operator, I want to override specific config values using environment variables.
 
 **Acceptance Criteria:**
@@ -41,15 +50,16 @@ The configuration system provides a flexible, layered approach to configuring th
 - [ ] Nested keys are separated by `__` (double underscore).
 - [ ] Example: `APP_WEBSERVICE__ADDRESS` overrides `webservice.address`.
 
-### US-004: Define Cache Stores and Routes
+### US-005: Define Cache Stores and Routes
 **Description:** As a developer, I want to define multiple cache stores and routing rules in the configuration.
 
 **Acceptance Criteria:**
 - [ ] Config supports a `cache` section.
-- [ ] `cache.stores` list allows defining `in_memory`, `redis`, and `mongo` stores.
+- [ ] `cache.stores` list allows defining `in_memory`, `redis`, `mongo`, and `oracle` stores.
 - [ ] `cache.routes` list allows mapping URL paths to store names, and optionally `key_from_body`.
 - [ ] `redis` store config includes `url` and optional `prefix`.
 - [ ] `mongo` store config includes `url`, `database`, `collection`, `min_pool_size`, and `max_pool_size`.
+- [ ] `oracle` store config includes `url` and `table_name`.
 
 ## 4. Functional Requirements
 
@@ -59,6 +69,7 @@ The configuration system provides a flexible, layered approach to configuring th
     *   `version`: Print application and library versions.
     *   `start`: Run the service. Args: `--config` (required), `--secrets` (optional).
     *   `config-check`: Validate config. Args: `--config` (required), `--secrets` (optional).
+    *   `create-schemas`: Create schemas for databases (e.g. Oracle). Args: `--config` (required), `--secrets` (optional).
 
 ### Configuration Loading
 3.  **Library**: Use `figment` for layered configuration.
@@ -76,7 +87,7 @@ The configuration system provides a flexible, layered approach to configuring th
     *   `preload_schemas`: List of integer Schema IDs to be fetched and cached at startup (optional). Startup will fail if any schema cannot be loaded.
 9.  **Startup Checks**: `StartupCheckConfig` (timeout, fails, enabled).
 10. **Cache**: `CacheConfig` (stores, routes).
-    *   `stores`: List of definitions. Each has `name`, `type` (tagged, snake_case, supports `in_memory`, `redis`, `mongo`), `schemas`.
+    *   `stores`: List of definitions. Each has `name`, `type` (tagged, snake_case, supports `in_memory`, `redis`, `mongo`, `oracle`), `schemas`.
     *   `routes`: List of `path` -> `store` mappings.
 
 ## 5. Non-Goals

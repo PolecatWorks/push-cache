@@ -16,8 +16,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.web.servlet.function.ServerRequest;
-import org.springframework.web.servlet.function.ServerResponse;
+import org.springframework.web.reactive.function.server.ServerRequest;
+import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -27,7 +28,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 public class RecordHandler {
 
@@ -53,191 +53,183 @@ public class RecordHandler {
         this.keyFromBody = keyFromBody;
     }
 
-    public ServerResponse listRecords(ServerRequest request) {
-        Optional<String> filter = request.param("filter");
-        Optional<String> limitParam = request.param("limit");
-        Optional<String> offsetParam = request.param("offset");
+    public Mono<ServerResponse> listRecords(ServerRequest request) {
+        Optional<String> filter = request.queryParam("filter");
+        Optional<String> limitParam = request.queryParam("limit");
+        Optional<String> offsetParam = request.queryParam("offset");
 
-        List<String> keys = new ArrayList<>(cache.getKeys());
-
-        if (filter.isPresent()) {
-            String filterVal = filter.get();
-            keys.removeIf(k -> !k.contains(filterVal));
-        }
-
-        Collections.sort(keys);
-
-        long offset = 0;
-        long limit = Long.MAX_VALUE;
+        long offset;
+        long limit;
 
         try {
             offset = offsetParam.map(Long::parseLong).orElse(0L);
             limit = limitParam.map(Long::parseLong).orElse(Long.MAX_VALUE);
         } catch (NumberFormatException e) {
-            return ServerResponse.badRequest().body("Invalid limit or offset");
+            return ServerResponse.badRequest().bodyValue("Invalid limit or offset");
         }
 
-        List<String> pagedKeys = keys.stream()
-                .skip(offset)
-                .limit(limit)
-                .collect(Collectors.toList());
-
-        System.err.println("Returning " + pagedKeys.size() + " keys");
-
-        return ServerResponse.ok()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(pagedKeys);
+        return cache.getKeys()
+                .filter(k -> filter.isEmpty() || k.contains(filter.get()))
+                .collectSortedList()
+                .flatMap(keys -> {
+                    List<String> pagedKeys = new ArrayList<>();
+                    long end = Math.min(offset + limit, keys.size());
+                    if (offset < keys.size()) {
+                        for (long i = offset; i < end; i++) {
+                            pagedKeys.add(keys.get((int) i));
+                        }
+                    }
+                    System.err.println("Returning " + pagedKeys.size() + " keys");
+                    return ServerResponse.ok()
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .bodyValue(pagedKeys);
+                });
     }
 
-    public ServerResponse createRecord(ServerRequest request) {
+    public Mono<ServerResponse> createRecord(ServerRequest request) {
         String id = request.pathVariable("id");
-        byte[] body;
-        try {
-            body = request.body(byte[].class);
-        } catch (Exception e) {
-            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "Failed to read body"));
-        }
+        return request.bodyToMono(byte[].class)
+                .flatMap(body -> {
+                    if (body.length < 5) {
+                        return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Collections.singletonMap("message", "Payload too short"));
+                    }
 
-        if (body.length < 5) {
-            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "Payload too short"));
-        }
+                    if (body[0] != 0) {
+                        return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Collections.singletonMap("message", "Invalid Magic Byte"));
+                    }
 
-        if (body[0] != 0) {
-            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "Invalid Magic Byte"));
-        }
+                    int schemaId = ByteBuffer.wrap(body, 1, 4).getInt();
+                    logger.info("Received record with Schema ID: {}", schemaId);
 
-        int schemaId = ByteBuffer.wrap(body, 1, 4).getInt();
-        logger.info("Received record with Schema ID: {}", schemaId);
-
-        cache.put(id, body);
-
-        return ServerResponse.status(HttpStatus.CREATED)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Collections.singletonMap("id", id));
+                    return cache.put(id, body)
+                            .then(ServerResponse.status(HttpStatus.CREATED)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .bodyValue(Collections.singletonMap("id", id)));
+                })
+                .switchIfEmpty(
+                        ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Collections.singletonMap("message", "Failed to read body"))
+                );
     }
 
-    public ServerResponse getRecord(ServerRequest request) {
+    public Mono<ServerResponse> getRecord(ServerRequest request) {
         metricsService.incrementRequestsTotal(cache.getName());
         String id = request.pathVariable("id");
         return retrieveRecord(id);
     }
 
     @SuppressWarnings("unchecked")
-    public ServerResponse getRecordByBody(ServerRequest request) {
+    public Mono<ServerResponse> getRecordByBody(ServerRequest request) {
         metricsService.incrementRequestsTotal(cache.getName());
 
-        Map<String, Object> body;
-        try {
-            body = request.body(Map.class);
-        } catch (Exception e) {
-            return ServerResponse.badRequest()
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "Invalid JSON body"));
-        }
+        return request.bodyToMono(Map.class)
+                .flatMap(body -> {
+                    if (keyFromBody == null) {
+                        return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Collections.singletonMap("message", "key_from_body not configured"));
+                    }
 
-        if (keyFromBody == null) {
-            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "key_from_body not configured"));
-        }
+                    if (!body.containsKey(keyFromBody)) {
+                        return ServerResponse.badRequest()
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Collections.singletonMap("message", "Missing key '" + keyFromBody + "' in body"));
+                    }
 
-        if (!body.containsKey(keyFromBody)) {
-            return ServerResponse.badRequest()
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "Missing key '" + keyFromBody + "' in body"));
-        }
+                    Object keyVal = body.get(keyFromBody);
+                    String id;
+                    if (keyVal instanceof String) {
+                        id = (String) keyVal;
+                    } else if (keyVal instanceof Number) {
+                        id = keyVal.toString();
+                    } else {
+                        return ServerResponse.badRequest()
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Collections.singletonMap("message", "Key '" + keyFromBody + "' must be a string or number"));
+                    }
 
-        Object keyVal = body.get(keyFromBody);
-        String id;
-        if (keyVal instanceof String) {
-            id = (String) keyVal;
-        } else if (keyVal instanceof Number) {
-            id = keyVal.toString();
-        } else {
-            return ServerResponse.badRequest()
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "Key '" + keyFromBody + "' must be a string or number"));
-        }
-
-        return retrieveRecord(id);
+                    return retrieveRecord(id);
+                })
+                .switchIfEmpty(
+                        ServerResponse.badRequest()
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Collections.singletonMap("message", "Invalid JSON body"))
+                );
     }
 
-    private ServerResponse retrieveRecord(String id) {
-        byte[] data = cache.get(id);
+    private Mono<ServerResponse> retrieveRecord(String id) {
+        return cache.get(id)
+                .flatMap(data -> {
+                    try {
+                        if (data.length < 5) {
+                            throw new RuntimeException("Invalid Avro message format");
+                        }
+                        ByteBuffer buffer = ByteBuffer.wrap(data);
+                        byte magic = buffer.get();
+                        if (magic != 0) {
+                            throw new RuntimeException("Invalid Avro message format");
+                        }
+                        int schemaId = buffer.getInt();
 
-        if (data == null) {
-            metricsService.incrementRequestsMiss(cache.getName());
-            return ServerResponse.status(HttpStatus.NOT_FOUND)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "User not found in dynamic cache"));
-        }
+                        Schema schema;
+                        try {
+                            schema = schemaService.getSchema(schemaId);
+                        } catch (Exception e) {
+                            return ServerResponse.status(HttpStatus.NOT_FOUND)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .bodyValue(Collections.singletonMap("message", "Schema not found in cache"));
+                        }
 
-        try {
-            if (data.length < 5) {
-                throw new RuntimeException("Invalid Avro message format");
-            }
-            ByteBuffer buffer = ByteBuffer.wrap(data);
-            byte magic = buffer.get();
-            if (magic != 0) {
-                throw new RuntimeException("Invalid Avro message format");
-            }
-            int schemaId = buffer.getInt();
+                        int binaryStart = buffer.position();
+                        int binaryLen = data.length - binaryStart;
 
-            Schema schema;
-            try {
-                schema = schemaService.getSchema(schemaId);
-            } catch (Exception e) {
-                return ServerResponse.status(HttpStatus.NOT_FOUND)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(Collections.singletonMap("message", "Schema not found in cache"));
-            }
+                        GenericDatumReader<Object> reader = new GenericDatumReader<>(schema);
+                        BinaryDecoder decoder = DecoderFactory.get().binaryDecoder(data, binaryStart, binaryLen, null);
+                        Object datum = reader.read(null, decoder);
 
-            int binaryStart = buffer.position();
-            int binaryLen = data.length - binaryStart;
+                        ByteArrayOutputStream out = new ByteArrayOutputStream();
+                        JsonEncoder encoder = EncoderFactory.get().jsonEncoder(schema, out);
+                        GenericDatumWriter<Object> writer = new GenericDatumWriter<>(schema);
+                        writer.write(datum, encoder);
+                        encoder.flush();
+                        byte[] jsonBytes = out.toByteArray();
 
-            GenericDatumReader<Object> reader = new GenericDatumReader<>(schema);
-            BinaryDecoder decoder = DecoderFactory.get().binaryDecoder(data, binaryStart, binaryLen, null);
-            Object datum = reader.read(null, decoder);
+                        Duration maxAge = appConfig.getKafka().getCacheMaxAge();
 
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            JsonEncoder encoder = EncoderFactory.get().jsonEncoder(schema, out);
-            GenericDatumWriter<Object> writer = new GenericDatumWriter<>(schema);
-            writer.write(datum, encoder);
-            encoder.flush();
-            byte[] jsonBytes = out.toByteArray();
+                        return ServerResponse.ok()
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .cacheControl(CacheControl.maxAge(maxAge).cachePublic())
+                                .bodyValue(jsonBytes);
 
-            Duration maxAge = appConfig.getKafka().getCacheMaxAge();
-
-            return ServerResponse.ok()
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .cacheControl(CacheControl.maxAge(maxAge).cachePublic())
-                    .body(jsonBytes);
-
-        } catch (Exception e) {
-            logger.error("Error processing record {}", id, e);
-            return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message",
-                            e.getMessage() != null ? e.getMessage() : "Avro Deserialization Error"));
-        }
+                    } catch (Exception e) {
+                        logger.error("Error processing record {}", id, e);
+                        return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Collections.singletonMap("message",
+                                        e.getMessage() != null ? e.getMessage() : "Avro Deserialization Error"));
+                    }
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    metricsService.incrementRequestsMiss(cache.getName());
+                    return ServerResponse.status(HttpStatus.NOT_FOUND)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .bodyValue(Collections.singletonMap("message", "User not found in dynamic cache"));
+                }));
     }
 
-    public ServerResponse deleteRecord(ServerRequest request) {
+    public Mono<ServerResponse> deleteRecord(ServerRequest request) {
         String id = request.pathVariable("id");
-        byte[] data = cache.remove(id);
-
-        if (data == null) {
-            return ServerResponse.status(HttpStatus.NOT_FOUND)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Collections.singletonMap("message", "User not found"));
-        }
-
-        return ServerResponse.ok().body(data);
+        return cache.remove(id)
+                .flatMap(data -> ServerResponse.ok().bodyValue(data))
+                .switchIfEmpty(
+                        ServerResponse.status(HttpStatus.NOT_FOUND)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Collections.singletonMap("message", "User not found"))
+                );
     }
 }

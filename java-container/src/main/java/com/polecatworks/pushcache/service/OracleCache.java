@@ -9,6 +9,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.util.HashSet;
@@ -85,102 +88,115 @@ public class OracleCache implements Cache, AutoCloseable {
     }
 
     @Override
-    public void put(String key, byte[] value) {
-        try {
-            String sql = String.format(
-                    "MERGE INTO %s t " +
-                    "USING (SELECT ? AS k, CAST(? AS BLOB) AS v FROM dual) s " +
-                    "ON (t.k = s.k) " +
-                    "WHEN MATCHED THEN UPDATE SET t.v = s.v " +
-                    "WHEN NOT MATCHED THEN INSERT (k, v) VALUES (s.k, s.v)",
-                    tableName
-            );
-            jdbcTemplate.update(sql, key, value);
-        } catch (Exception e) {
-            logger.error("Oracle insert error for key {}: {}", key, e.getMessage(), e);
-            throw new RuntimeException("Oracle insert error", e);
-        }
-    }
-
-    @Override
-    public byte[] get(String key) {
-        try {
-            String sql = String.format("SELECT v FROM %s WHERE k = ?", tableName);
-            List<byte[]> results = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getBytes("v"), key);
-            if (!results.isEmpty()) {
-                return results.get(0);
-            }
-            return null;
-        } catch (Exception e) {
-            logger.error("Oracle get error for key {}: {}", key, e.getMessage(), e);
-            throw new RuntimeException("Oracle get error", e);
-        }
-    }
-
-    @Override
-    public byte[] remove(String key) {
-        return transactionTemplate.execute(status -> {
+    public Mono<Void> put(String key, byte[] value) {
+        return Mono.fromRunnable(() -> {
             try {
-                // Fetch the old value first
-                String fetchSql = String.format("SELECT v FROM %s WHERE k = ?", tableName);
-                List<byte[]> results = jdbcTemplate.query(fetchSql, (rs, rowNum) -> rs.getBytes("v"), key);
-
-                byte[] oldValue = null;
-                if (!results.isEmpty()) {
-                    oldValue = results.get(0);
-                }
-
-                // Now delete it
-                String deleteSql = String.format("DELETE FROM %s WHERE k = ?", tableName);
-                jdbcTemplate.update(deleteSql, key);
-
-                return oldValue;
+                String sql = String.format(
+                        "MERGE INTO %s t " +
+                        "USING (SELECT ? AS k, CAST(? AS BLOB) AS v FROM dual) s " +
+                        "ON (t.k = s.k) " +
+                        "WHEN MATCHED THEN UPDATE SET t.v = s.v " +
+                        "WHEN NOT MATCHED THEN INSERT (k, v) VALUES (s.k, s.v)",
+                        tableName
+                );
+                jdbcTemplate.update(sql, key, value);
             } catch (Exception e) {
-                status.setRollbackOnly();
-                logger.error("Oracle remove error for key {}: {}", key, e.getMessage(), e);
-                throw new RuntimeException("Oracle remove error", e);
+                logger.error("Oracle insert error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Oracle insert error", e);
             }
-        });
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     @Override
-    public Set<String> getKeys() {
-        try {
-            String sql = String.format("SELECT k FROM %s", tableName);
-            List<String> keysList = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("k"));
-            return new HashSet<>(keysList);
-        } catch (Exception e) {
-            logger.error("Oracle getKeys error: {}", e.getMessage(), e);
-            throw new RuntimeException("Oracle getKeys error", e);
-        }
+    public Mono<byte[]> get(String key) {
+        return Mono.fromCallable(() -> {
+            try {
+                String sql = String.format("SELECT v FROM %s WHERE k = ?", tableName);
+                List<byte[]> results = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getBytes("v"), key);
+                if (!results.isEmpty()) {
+                    return results.get(0);
+                }
+                return null;
+            } catch (Exception e) {
+                logger.error("Oracle get error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Oracle get error", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override
-    public boolean containsKey(String key) {
-        try {
-            String sql = String.format("SELECT COUNT(*) FROM %s WHERE k = ?", tableName);
-            Integer count = jdbcTemplate.queryForObject(sql, Integer.class, key);
-            return count != null && count > 0;
-        } catch (Exception e) {
-            logger.error("Oracle containsKey error for key {}: {}", key, e.getMessage(), e);
-            throw new RuntimeException("Oracle containsKey error", e);
-        }
+    public Mono<byte[]> remove(String key) {
+        return Mono.fromCallable(() -> {
+            return transactionTemplate.execute(status -> {
+                try {
+                    // Fetch the old value first
+                    String fetchSql = String.format("SELECT v FROM %s WHERE k = ?", tableName);
+                    List<byte[]> results = jdbcTemplate.query(fetchSql, (rs, rowNum) -> rs.getBytes("v"), key);
+
+                    byte[] oldValue = null;
+                    if (!results.isEmpty()) {
+                        oldValue = results.get(0);
+                    }
+
+                    // Now delete it
+                    String deleteSql = String.format("DELETE FROM %s WHERE k = ?", tableName);
+                    jdbcTemplate.update(deleteSql, key);
+
+                    return oldValue;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.error("Oracle remove error for key {}: {}", key, e.getMessage(), e);
+                    throw new RuntimeException("Oracle remove error", e);
+                }
+            });
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     @Override
-    public void clear() {
-        try {
-            String sql = String.format("DELETE FROM %s", tableName);
-            jdbcTemplate.update(sql);
-        } catch (Exception e) {
-            logger.error("Oracle clear error: {}", e.getMessage(), e);
-            throw new RuntimeException("Oracle clear error", e);
-        }
+    public Flux<String> getKeys() {
+        return Mono.fromCallable(() -> {
+            try {
+                String sql = String.format("SELECT k FROM %s", tableName);
+                return jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("k"));
+            } catch (Exception e) {
+                logger.error("Oracle getKeys error: {}", e.getMessage(), e);
+                throw new RuntimeException("Oracle getKeys error", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic()).flatMapMany(Flux::fromIterable);
     }
 
     @Override
-    public void checkHealth() throws Exception {
-        jdbcTemplate.execute("SELECT 1 FROM DUAL");
+    public Mono<Boolean> containsKey(String key) {
+        return Mono.fromCallable(() -> {
+            try {
+                String sql = String.format("SELECT COUNT(*) FROM %s WHERE k = ?", tableName);
+                Integer count = jdbcTemplate.queryForObject(sql, Integer.class, key);
+                return count != null && count > 0;
+            } catch (Exception e) {
+                logger.error("Oracle containsKey error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Oracle containsKey error", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<Void> clear() {
+        return Mono.fromRunnable(() -> {
+            try {
+                String sql = String.format("DELETE FROM %s", tableName);
+                jdbcTemplate.update(sql);
+            } catch (Exception e) {
+                logger.error("Oracle clear error: {}", e.getMessage(), e);
+                throw new RuntimeException("Oracle clear error", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    @Override
+    public Mono<Void> checkHealth() {
+        return Mono.fromRunnable(() -> {
+            jdbcTemplate.execute("SELECT 1 FROM DUAL");
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     @Override

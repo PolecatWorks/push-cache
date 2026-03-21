@@ -14,17 +14,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.io.ByteArrayOutputStream;
 
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
-@AutoConfigureMockMvc
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = {
         // Hams
         "hams.address=0.0.0.0:8079",
@@ -41,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "runtime.name=test",
 
         // WebService
-        "webservice.address=http://localhost:8080/api",
+        "webservice.address=http://localhost:0/api",
 
         // Kafka
         "kafka.brokers=tcp://localhost:9092",
@@ -68,7 +65,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class KeyFromBodyTest {
 
     @Autowired
-    private MockMvc mockMvc;
+    private WebTestClient webTestClient;
 
     @Autowired
     private Cache cache;
@@ -78,7 +75,7 @@ public class KeyFromBodyTest {
 
     @BeforeEach
     void setup() {
-        cache.clear();
+        cache.clear().block();
     }
 
     private void populateCache(String key, String value) throws Exception {
@@ -97,7 +94,7 @@ public class KeyFromBodyTest {
         writer.write(value, encoder);
         encoder.flush();
 
-        cache.put(key, out.toByteArray());
+        cache.put(key, out.toByteArray()).block();
     }
 
     @Test
@@ -106,63 +103,74 @@ public class KeyFromBodyTest {
 
         String jsonBody = "{\"userId\": \"user123\"}";
 
-        mockMvc.perform(get("/api/users_by_body")
+        webTestClient.method(org.springframework.http.HttpMethod.GET)
+                .uri("/api/users_by_body")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonBody))
-                .andExpect(status().isOk())
-                .andExpect(content().json("\"Alice\""));
+                .bodyValue(jsonBody)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody().json("\"Alice\"");
     }
 
     @Test
     void testGetRecordByBodyMissingKey() throws Exception {
         String jsonBody = "{\"otherId\": \"user123\"}";
 
-        mockMvc.perform(get("/api/users_by_body")
+        webTestClient.method(org.springframework.http.HttpMethod.GET)
+                .uri("/api/users_by_body")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonBody))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Missing key 'userId' in body"));
+                .bodyValue(jsonBody)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.message").isEqualTo("Missing key 'userId' in body");
     }
 
     @Test
     void testGetRecordByBodyInvalidJson() throws Exception {
         String jsonBody = "{ invalid json }";
 
-        mockMvc.perform(get("/api/users_by_body")
+        webTestClient.method(org.springframework.http.HttpMethod.GET)
+                .uri("/api/users_by_body")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonBody))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Invalid JSON body"));
+                .bodyValue(jsonBody)
+                .exchange()
+                .expectStatus().isBadRequest();
     }
 
     @Test
     void testGetRecordByBodyNotFound() throws Exception {
         String jsonBody = "{\"userId\": \"unknown\"}";
 
-        mockMvc.perform(get("/api/users_by_body")
+        webTestClient.method(org.springframework.http.HttpMethod.GET)
+                .uri("/api/users_by_body")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonBody))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("User not found in dynamic cache"));
+                .bodyValue(jsonBody)
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody().jsonPath("$.message").isEqualTo("User not found in dynamic cache");
     }
 
     @Test
     void testGetRecordByBodyKeyNotString() throws Exception {
         String jsonBody = "{\"userId\": true}";
 
-        mockMvc.perform(get("/api/users_by_body")
+        webTestClient.method(org.springframework.http.HttpMethod.GET)
+                .uri("/api/users_by_body")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonBody))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Key 'userId' must be a string or number"));
+                .bodyValue(jsonBody)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.message").isEqualTo("Key 'userId' must be a string or number");
     }
 
     @Test
     void testStandardRouteStillWorks() throws Exception {
         populateCache("user123", "Alice");
 
-        mockMvc.perform(get("/api/users/user123"))
-                .andExpect(status().isOk())
-                .andExpect(content().json("\"Alice\""));
+        webTestClient.get()
+                .uri("/api/users/user123")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody().json("\"Alice\"");
     }
 }

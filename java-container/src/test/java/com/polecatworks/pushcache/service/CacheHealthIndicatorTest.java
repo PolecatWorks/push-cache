@@ -6,6 +6,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.Status;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -30,9 +31,11 @@ class CacheHealthIndicatorTest {
     void testHealthUp() throws Exception {
         Cache cache1 = mock(Cache.class);
         when(cache1.getName()).thenReturn("cache1");
+        when(cache1.checkHealth()).thenReturn(Mono.empty());
 
         Cache cache2 = mock(Cache.class);
         when(cache2.getName()).thenReturn("cache2");
+        when(cache2.checkHealth()).thenReturn(Mono.empty());
 
         when(cacheFactory.getAllStores()).thenReturn(List.of(cache1, cache2));
 
@@ -47,10 +50,11 @@ class CacheHealthIndicatorTest {
     void testHealthDown() throws Exception {
         Cache cache1 = mock(Cache.class);
         when(cache1.getName()).thenReturn("cache1");
+        when(cache1.checkHealth()).thenReturn(Mono.empty());
 
         Cache cache2 = mock(Cache.class);
         when(cache2.getName()).thenReturn("cache2");
-        doThrow(new RuntimeException("Connection refused")).when(cache2).checkHealth();
+        when(cache2.checkHealth()).thenReturn(Mono.error(new RuntimeException("Connection refused")));
 
         when(cacheFactory.getAllStores()).thenReturn(List.of(cache1, cache2));
 

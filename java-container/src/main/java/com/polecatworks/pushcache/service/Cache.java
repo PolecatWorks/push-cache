@@ -1,14 +1,15 @@
 package com.polecatworks.pushcache.service;
 
-import java.util.Set;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public interface Cache {
     String getName();
-    void put(String key, byte[] value);
-    byte[] get(String key);
-    byte[] remove(String key);
-    Set<String> getKeys();
-    boolean containsKey(String key);
-    void clear();
-    void checkHealth() throws Exception;
+    Mono<Void> put(String key, byte[] value);
+    Mono<byte[]> get(String key);
+    Mono<byte[]> remove(String key);
+    Flux<String> getKeys();
+    Mono<Boolean> containsKey(String key);
+    Mono<Void> clear();
+    Mono<Void> checkHealth();
 }

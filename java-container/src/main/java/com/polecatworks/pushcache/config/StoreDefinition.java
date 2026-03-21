@@ -118,6 +118,8 @@ public class StoreDefinition {
         @JsonProperty("mongo")
         MONGO,
         @JsonProperty("oracle")
-        ORACLE
+        ORACLE,
+        @JsonProperty("postgres")
+        POSTGRES
     }
 }

@@ -51,6 +51,14 @@ public class CacheFactory implements DisposableBean {
                         logger.error("Failed to initialize Oracle store: {}", storeDef.getName(), e);
                         throw new RuntimeException("Failed to initialize Oracle store: " + storeDef.getName(), e);
                     }
+                } else if (storeDef.getType() == StoreDefinition.StoreType.POSTGRES) {
+                    try {
+                        stores.put(storeDef.getName(), new PostgresCache(storeDef));
+                        logger.info("Initialized Postgres store: {}", storeDef.getName());
+                    } catch (Exception e) {
+                        logger.error("Failed to initialize Postgres store: {}", storeDef.getName(), e);
+                        throw new RuntimeException("Failed to initialize Postgres store: " + storeDef.getName(), e);
+                    }
                 }
 
                 // Map Schemas to Store

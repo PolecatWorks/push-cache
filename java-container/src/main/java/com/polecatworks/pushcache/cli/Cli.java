@@ -4,6 +4,7 @@ import com.polecatworks.pushcache.PushCacheApplication;
 import com.polecatworks.pushcache.config.AppConfig;
 import com.polecatworks.pushcache.config.StoreDefinition;
 import com.polecatworks.pushcache.service.OracleCache;
+import com.polecatworks.pushcache.service.PostgresCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
@@ -97,13 +98,27 @@ public class Cli {
                         try (OracleCache oracleCache = new OracleCache(storeDef)) {
                             Flyway flyway = Flyway.configure()
                                     .dataSource(oracleCache.getDataSource())
-                                    .locations("classpath:db/migration")
+                                    .locations("classpath:db/migration/oracle")
                                     .placeholders(java.util.Collections.singletonMap("tableName", storeDef.getTableName()))
                                     .load();
                             flyway.migrate();
                             logger.info("Successfully created schema for store: {}", storeDef.getName());
                         } catch (Exception e) {
                             logger.error("Failed to create schema for Oracle store: {}", storeDef.getName(), e);
+                            throw new RuntimeException("Schema creation failed", e);
+                        }
+                    } else if (storeDef.getType() == StoreDefinition.StoreType.POSTGRES) {
+                        logger.info("Creating schema for Postgres store: {}", storeDef.getName());
+                        try (PostgresCache postgresCache = new PostgresCache(storeDef)) {
+                            Flyway flyway = Flyway.configure()
+                                    .dataSource(postgresCache.getDataSource())
+                                    .locations("classpath:db/migration/postgres")
+                                    .placeholders(java.util.Collections.singletonMap("tableName", storeDef.getTableName()))
+                                    .load();
+                            flyway.migrate();
+                            logger.info("Successfully created schema for store: {}", storeDef.getName());
+                        } catch (Exception e) {
+                            logger.error("Failed to create schema for Postgres store: {}", storeDef.getName(), e);
                             throw new RuntimeException("Schema creation failed", e);
                         }
                     }

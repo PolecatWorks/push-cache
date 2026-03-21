@@ -79,11 +79,12 @@ This document highlights the architectural and implementation differences betwee
 - The `Postgres` store persists data as BYTEA with a VARCHAR primary key.
 
 ### Java
-- Supports `IN_MEMORY`, `REDIS`, `MONGO`, and `ORACLE` cache stores.
+- Supports `IN_MEMORY`, `REDIS`, `MONGO`, `ORACLE`, and `POSTGRES` cache stores.
 - The `MONGO` store persists data as BSON documents matching the Rust implementation.
 - The `ORACLE` store persists data as BLOBs with a VARCHAR2 primary key, utilizing standard synchronous JDBC (`HikariDataSource` and `JdbcTemplate`) which aligns with the application's overall synchronous execution model. Flyway is used via `create-schemas` CLI command to automatically create the table.
-- **Parity**: Medium. The Rust application has implemented a `Postgres` cache store that is not yet supported in the Java implementation.
+- The `POSTGRES` store persists data as BYTEA with a VARCHAR primary key, utilizing standard synchronous JDBC (`HikariDataSource` and `JdbcTemplate`). Flyway is used via `create-schemas` CLI command to automatically create the table.
+- **Parity**: High. The Java implementation has implemented all cache stores that the Rust application supports.
 
 ## 7. Summary of Work Remaining
 To achieve full parity, the Java implementation requires:
-1.  **PostgresCache Implementation**: Implement a Postgres storage backend to match the new Rust feature.
+None.

@@ -6,7 +6,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import reactor.core.publisher.Flux;
@@ -14,13 +13,11 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
-public class OracleCache implements Cache, AutoCloseable {
+public class PostgresCache implements Cache, AutoCloseable {
 
-    private static final Logger logger = LoggerFactory.getLogger(OracleCache.class);
+    private static final Logger logger = LoggerFactory.getLogger(PostgresCache.class);
 
     private final String name;
     private final String tableName;
@@ -28,14 +25,14 @@ public class OracleCache implements Cache, AutoCloseable {
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transactionTemplate;
 
-    public OracleCache(StoreDefinition storeDef) {
+    public PostgresCache(StoreDefinition storeDef) {
         this.name = storeDef.getName();
 
         if (storeDef.getUrl() == null) {
-            throw new IllegalArgumentException("Oracle URL is required for store: " + name);
+            throw new IllegalArgumentException("Postgres URL is required for store: " + name);
         }
         if (storeDef.getTableName() == null) {
-            throw new IllegalArgumentException("Oracle tableName is required for store: " + name);
+            throw new IllegalArgumentException("Postgres tableName is required for store: " + name);
         }
 
         this.tableName = storeDef.getTableName();
@@ -44,17 +41,17 @@ public class OracleCache implements Cache, AutoCloseable {
         HikariConfig config = new HikariConfig();
 
         // Formulate jdbc connection url
-        // e.g. oracle://host:port/service_name
+        // e.g. postgres://host:port/database
         String host = uri.getHost() != null ? uri.getHost() : "localhost";
-        int port = uri.getPort() != -1 ? uri.getPort() : 1521;
-        String path = uri.getPath(); // Should be /service_name
+        int port = uri.getPort() != -1 ? uri.getPort() : 5432;
+        String path = uri.getPath(); // Should be /database
         if (path != null && path.startsWith("/")) {
             path = path.substring(1);
         }
 
-        String jdbcUrl = String.format("jdbc:oracle:thin:@//%s:%d/%s", host, port, path);
+        String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, path);
         config.setJdbcUrl(jdbcUrl);
-        config.setDriverClassName("oracle.jdbc.OracleDriver");
+        config.setDriverClassName("org.postgresql.Driver");
 
         // Extract user and password from URL if available
         String userInfo = uri.getUserInfo();
@@ -92,17 +89,14 @@ public class OracleCache implements Cache, AutoCloseable {
         return Mono.fromRunnable(() -> {
             try {
                 String sql = String.format(
-                        "MERGE INTO %s t " +
-                        "USING (SELECT ? AS k, CAST(? AS BLOB) AS v FROM dual) s " +
-                        "ON (t.k = s.k) " +
-                        "WHEN MATCHED THEN UPDATE SET t.v = s.v " +
-                        "WHEN NOT MATCHED THEN INSERT (k, v) VALUES (s.k, s.v)",
+                        "INSERT INTO %s (k, v) VALUES (?, ?) " +
+                        "ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v",
                         tableName
                 );
                 jdbcTemplate.update(sql, key, value);
             } catch (Exception e) {
-                logger.error("Oracle insert error for key {}: {}", key, e.getMessage(), e);
-                throw new RuntimeException("Oracle insert error", e);
+                logger.error("Postgres insert error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Postgres insert error", e);
             }
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
@@ -118,8 +112,8 @@ public class OracleCache implements Cache, AutoCloseable {
                 }
                 return null;
             } catch (Exception e) {
-                logger.error("Oracle get error for key {}: {}", key, e.getMessage(), e);
-                throw new RuntimeException("Oracle get error", e);
+                logger.error("Postgres get error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Postgres get error", e);
             }
         }).subscribeOn(Schedulers.boundedElastic());
     }
@@ -145,8 +139,8 @@ public class OracleCache implements Cache, AutoCloseable {
                     return oldValue;
                 } catch (Exception e) {
                     status.setRollbackOnly();
-                    logger.error("Oracle remove error for key {}: {}", key, e.getMessage(), e);
-                    throw new RuntimeException("Oracle remove error", e);
+                    logger.error("Postgres remove error for key {}: {}", key, e.getMessage(), e);
+                    throw new RuntimeException("Postgres remove error", e);
                 }
             });
         }).subscribeOn(Schedulers.boundedElastic());
@@ -159,8 +153,8 @@ public class OracleCache implements Cache, AutoCloseable {
                 String sql = String.format("SELECT k FROM %s", tableName);
                 return jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("k"));
             } catch (Exception e) {
-                logger.error("Oracle getKeys error: {}", e.getMessage(), e);
-                throw new RuntimeException("Oracle getKeys error", e);
+                logger.error("Postgres getKeys error: {}", e.getMessage(), e);
+                throw new RuntimeException("Postgres getKeys error", e);
             }
         }).subscribeOn(Schedulers.boundedElastic()).flatMapMany(Flux::fromIterable);
     }
@@ -173,8 +167,8 @@ public class OracleCache implements Cache, AutoCloseable {
                 Integer count = jdbcTemplate.queryForObject(sql, Integer.class, key);
                 return count != null && count > 0;
             } catch (Exception e) {
-                logger.error("Oracle containsKey error for key {}: {}", key, e.getMessage(), e);
-                throw new RuntimeException("Oracle containsKey error", e);
+                logger.error("Postgres containsKey error for key {}: {}", key, e.getMessage(), e);
+                throw new RuntimeException("Postgres containsKey error", e);
             }
         }).subscribeOn(Schedulers.boundedElastic());
     }
@@ -186,8 +180,8 @@ public class OracleCache implements Cache, AutoCloseable {
                 String sql = String.format("DELETE FROM %s", tableName);
                 jdbcTemplate.update(sql);
             } catch (Exception e) {
-                logger.error("Oracle clear error: {}", e.getMessage(), e);
-                throw new RuntimeException("Oracle clear error", e);
+                logger.error("Postgres clear error: {}", e.getMessage(), e);
+                throw new RuntimeException("Postgres clear error", e);
             }
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
@@ -195,7 +189,7 @@ public class OracleCache implements Cache, AutoCloseable {
     @Override
     public Mono<Void> checkHealth() {
         return Mono.fromRunnable(() -> {
-            jdbcTemplate.execute("SELECT 1 FROM DUAL");
+            jdbcTemplate.execute("SELECT 1");
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
@@ -203,7 +197,7 @@ public class OracleCache implements Cache, AutoCloseable {
     public void close() {
         if (dataSource != null) {
             dataSource.close();
-            logger.info("Closed Oracle data source for store: {}", name);
+            logger.info("Closed Postgres data source for store: {}", name);
         }
     }
 }
